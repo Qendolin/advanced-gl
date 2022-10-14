@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"fmt"
 	"log"
 
 	"github.com/go-gl/gl/v4.5-core/gl"
@@ -57,16 +58,27 @@ func (vbo *buffer) AllocateEmpty(size int, flags int) {
 	if vbo.immutable {
 		log.Panicf("VBO is immutable")
 	}
+	vbo.checkSmallAllocation(size)
 	gl.NamedBufferStorage(vbo.glId, size, nil, uint32(flags))
 	vbo.size = size
 	vbo.flags = uint32(flags)
 	vbo.immutable = true
 }
 
+func (vbo *buffer) checkSmallAllocation(size int) {
+	limit := 1024 * 4
+	if size > limit {
+		return
+	}
+	msg := fmt.Sprintf("Small buffer allocation: %v < %v bytes\x00", size, limit)
+	gl.DebugMessageInsert(gl.DEBUG_SOURCE_APPLICATION, gl.DEBUG_TYPE_PERFORMANCE, 1, gl.DEBUG_SEVERITY_NOTIFICATION, -1, gl.Str(msg))
+}
+
 func (vbo *buffer) AllocateEmptyMutable(size int, usage int) {
 	if vbo.immutable {
 		log.Panicf("VBO is immutable")
 	}
+	vbo.checkSmallAllocation(size)
 	gl.NamedBufferData(vbo.glId, size, nil, uint32(usage))
 	vbo.flags = uint32(usage)
 	vbo.size = size
@@ -80,6 +92,7 @@ func (vbo *buffer) Allocate(data any, flags int) {
 	if size == -1 {
 		log.Panicf("%v does not have a fixed size", data)
 	}
+	vbo.checkSmallAllocation(size)
 	gl.NamedBufferStorage(vbo.glId, size, Pointer(data), uint32(flags))
 	vbo.size = size
 	vbo.flags = uint32(flags)
@@ -94,6 +107,7 @@ func (vbo *buffer) AllocateMutable(data any, usage int) {
 	if size == -1 {
 		log.Panicf("%v does not have a fixed size", data)
 	}
+	vbo.checkSmallAllocation(size)
 	gl.NamedBufferData(vbo.glId, size, Pointer(data), uint32(usage))
 	vbo.flags = uint32(usage)
 	vbo.size = size
@@ -165,14 +179,16 @@ func (vbo *buffer) WriteIndex(index int, data any) {
 }
 
 type vertexArray struct {
-	glId uint32
+	glId          uint32
+	bindingRanges [][2]int
 }
 
 type UnboundVertexArray interface {
 	Layout(bufferIndex int, attributeIndex int, size int, dataType int, normalized bool, offset int)
 	LayoutI(bufferIndex int, attributeIndex int, size int, dataType int, offset int)
 	BindBuffer(bufferIndex int, vbo UnboundBuffer, offset int, stride int)
-	BindElementBuffer(ibo UnboundBuffer)
+	ReBindBuffer(bufferIndex int, vbo UnboundBuffer)
+	BindElementBuffer(ebo UnboundBuffer)
 	AttribDivisor(bufferIndex, divisor int)
 	Id() uint32
 	Bind() BoundVertexArray
@@ -186,7 +202,8 @@ func NewVertexArray() UnboundVertexArray {
 	var id uint32
 	gl.CreateVertexArrays(1, &id)
 	return &vertexArray{
-		glId: id,
+		glId:          id,
+		bindingRanges: make([][2]int, 32),
 	}
 }
 
@@ -212,11 +229,17 @@ func (vao *vertexArray) LayoutI(bufferIndex int, attributeIndex int, size int, d
 }
 
 func (vao *vertexArray) BindBuffer(bufferIndex int, vbo UnboundBuffer, offset int, stride int) {
+	vao.bindingRanges[bufferIndex] = [2]int{offset, stride}
 	gl.VertexArrayVertexBuffer(vao.glId, uint32(bufferIndex), vbo.Id(), offset, int32(stride))
 }
 
-func (vao *vertexArray) BindElementBuffer(ibo UnboundBuffer) {
-	gl.VertexArrayElementBuffer(vao.glId, ibo.Id())
+func (vao *vertexArray) ReBindBuffer(bufferIndex int, vbo UnboundBuffer) {
+	r := vao.bindingRanges[bufferIndex]
+	gl.VertexArrayVertexBuffer(vao.glId, uint32(bufferIndex), vbo.Id(), r[0], int32(r[1]))
+}
+
+func (vao *vertexArray) BindElementBuffer(ebo UnboundBuffer) {
+	gl.VertexArrayElementBuffer(vao.glId, ebo.Id())
 }
 
 func (vao *vertexArray) AttribDivisor(bufferIndex, divisor int) {

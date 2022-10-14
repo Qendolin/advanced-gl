@@ -467,7 +467,7 @@ func (builder *RenderBatchBuilder) Upload() *RenderBatch {
 	}
 
 	attributes := NewBuffer()
-	attributes.AllocateEmpty(int(unsafe.Sizeof(InstanceAttributes{}))*64, gl.DYNAMIC_STORAGE_BIT)
+	attributes.AllocateEmpty(int(unsafe.Sizeof(InstanceAttributes{}))*1024, gl.DYNAMIC_STORAGE_BIT)
 
 	vao := NewVertexArray()
 	vao.Layout(0, 0, 3, gl.FLOAT, false, int(unsafe.Offsetof(Vertex{}.Position)))
@@ -486,7 +486,7 @@ func (builder *RenderBatchBuilder) Upload() *RenderBatch {
 	vao.BindElementBuffer(elements)
 
 	commands := NewBuffer()
-	commands.AllocateEmpty(int(unsafe.Sizeof(DrawElementsIndirectCommand{}))*64, gl.DYNAMIC_STORAGE_BIT)
+	commands.AllocateEmpty(int(unsafe.Sizeof(DrawElementsIndirectCommand{}))*4096, gl.DYNAMIC_STORAGE_BIT)
 
 	builder.meshes = nil
 

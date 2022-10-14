@@ -61,7 +61,6 @@ func DrawSSAO() {
 		s.quad.Bind()
 		s.ssaoShader.Bind()
 		s.ssaoShader.Get(gl.FRAGMENT_SHADER).SetUniform("u_projection_mat", s.projMat)
-		s.ssaoShader.Get(gl.FRAGMENT_SHADER).SetUniform("u_view_mat", s.viewMat)
 		s.ssaoShader.Get(gl.FRAGMENT_SHADER).SetUniform("u_radius", ui.ssaoRadius)
 		s.ssaoShader.Get(gl.FRAGMENT_SHADER).SetUniform("u_exponent", ui.ssaoExponent)
 		s.bufferSampler.Bind(0)

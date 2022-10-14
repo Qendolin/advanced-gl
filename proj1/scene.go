@@ -206,7 +206,7 @@ loading:
 	lightSpheres.BindBuffer(0, vbo, 0, 3*4)
 
 	pointLightBuffer := NewBuffer()
-	pointLights := make([]PointLightBlock, len(ui.pointLights))
+	pointLights := make([]PointLightBlock, len(ui.pointLights), 1024)
 	pointLightBuffer.Allocate(pointLights, gl.DYNAMIC_STORAGE_BIT)
 	lightSpheres.BindBuffer(1, pointLightBuffer, 0, int(unsafe.Sizeof(PointLightBlock{})))
 	lightSpheres.AttribDivisor(1, 1)
@@ -242,7 +242,7 @@ loading:
 	lightCones.BindBuffer(0, vbo, 0, 3*4)
 
 	spotLightBuffer := NewBuffer()
-	spotLights := make([]SpotLightBlock, len(ui.spotLights))
+	spotLights := make([]SpotLightBlock, len(ui.spotLights), 1024)
 	spotLightBuffer.Allocate(spotLights, gl.DYNAMIC_STORAGE_BIT)
 	lightCones.BindBuffer(1, spotLightBuffer, 0, int(unsafe.Sizeof(SpotLightBlock{})))
 	lightCones.AttribDivisor(1, 1)
@@ -526,7 +526,6 @@ loading:
 	viewMat := mgl32.Ident4()
 
 	log.Println("Done!")
-	ctx.Show()
 
 	s = scene{
 		scene:            sc,
@@ -826,6 +825,7 @@ func Draw(ctx Context) {
 	GlState.Disable(CullFace)
 
 	if ui.enableOrthoLights {
+		// FIXME: Increadibly slow on intel
 		s.lightQuads.Bind()
 		s.orthoLightShader.Bind()
 		fragSh := s.orthoLightShader.Get(gl.FRAGMENT_SHADER)

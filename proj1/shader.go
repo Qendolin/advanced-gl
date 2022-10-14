@@ -1,11 +1,19 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"hash"
+	"io"
 	"log"
+	"os"
+	"path"
 	"reflect"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-gl/gl/v4.5-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
@@ -127,6 +135,90 @@ func (shaderPipeline *shaderPipeline) Id() uint32 {
 	return shaderPipeline.glId
 }
 
+type shaderCacheManager struct {
+	hasher hash.Hash
+}
+
+var ShaderCache = &shaderCacheManager{
+	hasher: md5.New(),
+}
+
+func (cache *shaderCacheManager) Put(source string, program ShaderProgram) {
+	key := cache.hash(source)
+	err := os.MkdirAll(".shadercache/", 0644)
+	if err != nil {
+		log.Printf("Could not create shader cache directory: %v\n", err)
+		return
+	}
+	file, err := os.OpenFile(path.Join(".shadercache", key+".bin"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("Could not write shader cache: %v\n", err)
+		return
+	}
+	var length int32
+	gl.GetProgramiv(program.Id(), gl.PROGRAM_BINARY_LENGTH, &length)
+	buf := make([]byte, length)
+	var format uint32
+	gl.GetProgramBinary(program.Id(), length, &length, &format, Pointer(buf))
+	buf = buf[:length]
+	binary.Write(file, binary.LittleEndian, format)
+	file.Write(buf)
+	file.Close()
+}
+
+func (cache *shaderCacheManager) hash(source string) string {
+	cache.hasher.Reset()
+	cache.hasher.Write([]byte(source))
+	cache.hasher.Write([]byte(gl.GoStr(gl.GetString(gl.VENDOR))))
+	cache.hasher.Write([]byte(gl.GoStr(gl.GetString(gl.RENDERER))))
+	cache.hasher.Write([]byte(gl.GoStr(gl.GetString(gl.VERSION))))
+	sum := cache.hasher.Sum(nil)
+	return fmt.Sprintf("%x", sum)
+}
+
+func (cache shaderCacheManager) Get(source string) (ok bool, buf []byte, format uint32) {
+	var (
+		err            error
+		shaderPath     string
+		shaderFile     *os.File
+		shaderFileInfo os.FileInfo
+	)
+	if Arguments.DisableShaderCache {
+		return
+	}
+	defer func() {
+		if err != nil {
+			log.Printf("Could not read shader cache: %v\n", err)
+		}
+	}()
+	key := cache.hash(source)
+	shaderPath = path.Join(".shadercache", key+".bin")
+	shaderFileInfo, err = os.Stat(shaderPath)
+	if errors.Is(err, os.ErrNotExist) {
+		err = nil
+		return
+	}
+	if err != nil {
+		return
+	}
+	// The cache should expire after some time, since the driver might have
+	// had an update and produce different code now
+	if time.Since(shaderFileInfo.ModTime()).Hours() > 24*30 {
+		os.Remove(shaderPath)
+		return
+	}
+	shaderFile, err = os.Open(shaderPath)
+	if err != nil {
+		return
+	}
+	binary.Read(shaderFile, binary.LittleEndian, &format)
+	buf, err = io.ReadAll(shaderFile)
+	if err != nil {
+		return
+	}
+	return true, buf, format
+}
+
 type glslDef struct {
 	marker  string
 	name    string
@@ -239,22 +331,37 @@ func (prog *program) CompileWith(defs map[string]string) error {
 		}
 	}
 
-	cStrs, free := gl.Strs(source + "\x00")
-	id := gl.CreateShaderProgramv(uint32(prog.stage), 1, cStrs)
-	free()
+	cached := false
+	var id uint32
+	if ok, buf, format := ShaderCache.Get(source); ok {
+		id = gl.CreateProgram()
+		gl.ProgramBinary(id, format, Pointer(buf), int32(len(buf)))
+		cached = true
+	} else {
+		cStrs, free := gl.Strs(source + "\x00")
+		id = gl.CreateShaderProgramv(uint32(prog.stage), 1, cStrs)
+		free()
+	}
+
 	var ok int32
 	gl.GetProgramiv(id, gl.LINK_STATUS, &ok)
 	if ok == gl.FALSE {
-		return fmt.Errorf("%v shader: %v", prog.name, readProgramInfoLog(id))
+		return fmt.Errorf("failed to link %v shader, log: %v", prog.name, readProgramInfoLog(id))
 	}
 	gl.ValidateProgram(id)
 	gl.GetProgramiv(id, gl.VALIDATE_STATUS, &ok)
 	if ok == gl.FALSE {
-		return fmt.Errorf("%v shader: %v", prog.name, readProgramInfoLog(id))
+		return fmt.Errorf("failed to validate %v shader, log: %v", prog.name, readProgramInfoLog(id))
 	}
+
 	prog.glId = id
 	prog.sourceLive = source
 	prog.uniformLocations = map[string]int32{}
+
+	if !cached {
+		ShaderCache.Put(source, prog)
+	}
+
 	return nil
 }
 

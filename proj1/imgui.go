@@ -39,9 +39,11 @@ func NewImGui() *ImGui {
 	vao.Layout(0, 2, 4, gl.UNSIGNED_BYTE, true, vertexOffsetCol)
 
 	vbo := NewBuffer()
+	vbo.AllocateEmpty(1024*8, gl.DYNAMIC_STORAGE_BIT)
 	vao.BindBuffer(0, vbo, 0, vertexSize)
 
 	ebo := NewBuffer()
+	ebo.AllocateEmpty(1024*8, gl.DYNAMIC_STORAGE_BIT)
 	vao.BindElementBuffer(ebo)
 
 	shader := NewPipeline()
@@ -157,9 +159,20 @@ func (gui *ImGui) Draw() {
 
 	for _, list := range drawData.CommandLists() {
 		vertexBuffer, vertexBufferSize := list.VertexBuffer()
-		gui.vbo.AllocateMutable(unsafe.Slice((*byte)(vertexBuffer), vertexBufferSize), gl.STREAM_DRAW)
+		if gui.vbo.Grow(vertexBufferSize) {
+			gui.vao.ReBindBuffer(0, gui.vbo)
+		}
+		if vertexBufferSize > 0 {
+			gui.vbo.Write(0, unsafe.Slice((*byte)(vertexBuffer), vertexBufferSize))
+		}
+
 		indexBuffer, indexBufferSize := list.IndexBuffer()
-		gui.ebo.AllocateMutable(unsafe.Slice((*byte)(indexBuffer), indexBufferSize), gl.STREAM_DRAW)
+		if gui.ebo.Grow(indexBufferSize) {
+			gui.vao.BindElementBuffer(gui.ebo)
+		}
+		if vertexBufferSize > 0 {
+			gui.ebo.Write(0, unsafe.Slice((*byte)(indexBuffer), indexBufferSize))
+		}
 
 		var indexType uint32
 		indexSize := imgui.IndexBufferLayout()

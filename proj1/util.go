@@ -106,3 +106,10 @@ func LightAttenuationRadius(c mgl32.Vec3, a float32) float32 {
 	lumi := float64(c.Dot(mgl32.Vec3{0.2125, 0.7154, 0.0721}))
 	return float32(math.Sqrt((lumi-cutoffIntensity)/(float64(a)*cutoffIntensity)) + bias)
 }
+
+func MaxI(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

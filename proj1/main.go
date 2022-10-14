@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"runtime"
@@ -17,7 +18,18 @@ var ViewportWidth, ViewportHeight int
 
 type context = *glfw.Window
 
+type arguments struct {
+	DisableShaderCache         bool
+	EnableCompatibilityProfile bool
+}
+
+var Arguments = arguments{}
+
 func main() {
+	flag.BoolVar(&Arguments.DisableShaderCache, "disable-shader-cache", Arguments.DisableShaderCache, "")
+	flag.BoolVar(&Arguments.EnableCompatibilityProfile, "enable-compatibility-profile", Arguments.EnableCompatibilityProfile, "")
+	flag.Parse()
+
 	ctx, err := initGLFW()
 	if err != nil {
 		log.Panic(err)
@@ -34,12 +46,15 @@ func main() {
 	Input.Init(ctx)
 	Gui = NewImGui()
 	Setup(ctx)
+	ctx.Show()
 	for !ctx.ShouldClose() {
 		glfw.PollEvents()
 		Input.Update(ctx)
 		Draw(ctx)
-		// Finish to get accurate time
-		gl.Finish()
+		if ui.accuratePerformance {
+			// Finish to get accurate time
+			gl.Finish()
+		}
 		DrawUi()
 		Gui.Draw()
 		ctx.SwapBuffers()
@@ -56,7 +71,11 @@ func initGLFW() (context, error) {
 	glfw.WindowHint(glfw.Resizable, glfw.False)
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 5)
-	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
+	if Arguments.EnableCompatibilityProfile {
+		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCompatProfile)
+	} else {
+		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
+	}
 	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
 	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
 	glfw.WindowHint(glfw.Visible, glfw.False)
@@ -74,13 +93,20 @@ func initGLFW() (context, error) {
 }
 
 func initGL(ctx context) error {
-	err := gl.InitWithProcAddrFunc(func(name string) unsafe.Pointer {
+	init := gl.InitWithProcAddrFunc
+	vendorSuffixes := []string{"3DFX", "PGI", "SGIX", "SGIS", "SGI", "IBM", "HP", "NV", "NVX", "INGR", "ARB", "EXT", "AMD", "ATI", "MESA", "KHR", "INTEL", "GREMEDY", "APPLE", "OES", "SUN", "SUNX"}
+	err := init(func(name string) unsafe.Pointer {
 		addr := glfw.GetProcAddress(name)
 		if addr == nil {
-			if !strings.HasSuffix(name, "NV") && !strings.HasSuffix(name, "ARB") && !strings.HasSuffix(name, "EXT") && !strings.HasSuffix(name, "AMD") && !strings.HasSuffix(name, "MESA") && !strings.HasSuffix(name, "KHR") && !strings.HasSuffix(name, "INTEL") {
+			vendorSuffix := false
+			for _, suffix := range vendorSuffixes {
+				if strings.HasSuffix(name, suffix) {
+					vendorSuffix = true
+				}
+			}
+			if !vendorSuffix {
 				log.Printf("Proc missing: %v\n", name)
 			}
-
 			return unsafe.Pointer(uintptr(0xffff_ffff_ffff_ffff))
 		}
 		return addr

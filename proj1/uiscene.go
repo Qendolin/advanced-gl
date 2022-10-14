@@ -16,10 +16,11 @@ type uiscene struct {
 	initialized   bool
 	cursorVisible bool
 
-	wireframe        bool
-	enableDirectDraw bool
-	bufferViewIndex  int
-	bufferViews      []string
+	wireframe           bool
+	enableDirectDraw    bool
+	accuratePerformance bool
+	bufferViewIndex     int
+	bufferViews         []string
 
 	enableShadows                                            bool
 	shadowBiasDraw                                           float32
@@ -110,7 +111,8 @@ type SceneSpotLight struct {
 }
 
 var uiDefaults = uiscene{
-	enableDirectDraw: true,
+	enableDirectDraw:    true,
+	accuratePerformance: true,
 
 	bufferViews: []string{"None", "Final", "Position", "Normal", "Albedo", "Depth", "AO", "Bloom", "Stencil"},
 
@@ -225,6 +227,14 @@ func DrawUi() {
 	i.Checkbox("Wireframe", &ui.wireframe)
 	i.SameLine()
 	i.Checkbox("Direct Draw", &ui.enableDirectDraw)
+	i.SameLine()
+	i.Checkbox("Accurate Performance", &ui.accuratePerformance)
+	if i.Button("Dump Buffers (Ctrl+F11)") {
+		DumpFramebuffers()
+	}
+	if Input.IsKeyDown(glfw.KeyLeftControl) && Input.IsKeyTap(glfw.KeyF11) {
+		DumpFramebuffers()
+	}
 	if i.BeginCombo("Buffer View", ui.bufferViews[ui.bufferViewIndex]) {
 		for j, v := range ui.bufferViews {
 			if i.Selectable(v) {

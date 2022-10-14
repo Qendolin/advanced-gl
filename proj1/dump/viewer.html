@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Framebuffer Dump Viewer</title>
+		<style>
+			html {
+				width: 100vw;
+				height: 100vh;
+			}
+			body {
+				margin: 0;
+				width: 100%;
+				height: 100%;
+				overflow: hidden;
+			}
+			main {
+				width: 100%;
+				height: 100%;
+				display: grid;
+				grid-template: 'center' 100% / 100%;
+				justify-content: center;
+				align-items: center;
+			}
+			#viewer {
+				width: 100%;
+				height: 100%;
+				grid-area: center;
+			}
+			#hint {
+				grid-area: center;
+				text-align: center;
+			}
+			#ui {
+				grid-area: center;
+				width: 100%;
+				height: 100%;
+			}
+
+			button.pressed {
+				background-color: darkgray;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<canvas id="viewer"> </canvas>
+			<h1 id="hint">Drag & Drop a .f32 Image</h1>
+			<div id="ui" style="display: none">
+				<label>
+					Low:
+					<input
+						type="number"
+						onchange="mapParams.low = this.value; mapImage()"
+						value="0"
+						min="0"
+						step="0.01"
+					/>
+				</label>
+				<br />
+				<label>
+					High:
+					<input
+						type="number"
+						onchange="mapParams.high = this.value; mapImage()"
+						value="1"
+						min="0"
+						step="0.01"
+					/>
+				</label>
+				<br />
+				<button
+					onclick="mapParams.red = !mapParams.red; mapImage(); this.classList.toggle('pressed')"
+					class="pressed"
+				>
+					R
+				</button>
+				<button
+					onclick="mapParams.green = !mapParams.green; mapImage(); this.classList.toggle('pressed')"
+					class="pressed"
+				>
+					G
+				</button>
+				<button
+					onclick="mapParams.blue = !mapParams.blue; mapImage(); this.classList.toggle('pressed')"
+					class="pressed"
+				>
+					B
+				</button>
+			</div>
+		</main>
+
+		<script>
+			const viewer = document.getElementById('viewer');
+			/** @type {CanvasRenderingContext2D} */
+			const ctx = viewer.getContext('2d');
+
+			let hdrImage, ldrImage;
+			const mapParams = {
+				low: 0.0,
+				high: 1.0,
+				red: true,
+				blue: true,
+				green: true,
+			};
+
+			function draw() {
+				if (viewer.width != viewer.clientWidth) viewer.width = viewer.clientWidth;
+				if (viewer.height != viewer.clientHeight) viewer.height = viewer.clientHeight;
+				ctx.resetTransform();
+				ctx.clearRect(0, 0, viewer.width, viewer.height);
+
+				if (ldrImage != null) {
+					const scale = Math.min(viewer.width / ldrImage.width, viewer.height / ldrImage.height);
+					ctx.translate(viewer.width / 2, viewer.height / 2);
+					ctx.scale(scale, -scale);
+					ctx.drawImage(ldrImage, -ldrImage.width / 2, -ldrImage.height / 2);
+				}
+
+				requestAnimationFrame(draw);
+			}
+
+			document.documentElement.ondragover = (ev) => {
+				ev.preventDefault();
+			};
+			document.documentElement.ondrop = (ev) => {
+				ev.preventDefault();
+
+				let file;
+				if (ev.dataTransfer.items) {
+					file = [...ev.dataTransfer.items].find((item) => item.kind == 'file')?.getAsFile();
+				} else {
+					file = ev.dataTransfer.files[0];
+				}
+
+				if (!file) return;
+				if (!file.name.endsWith('.f32')) {
+					alert('Must be a .f32 file');
+					return;
+				}
+
+				file.arrayBuffer().then((buffer) => loadImage(buffer));
+			};
+
+			function loadImage(buffer) {
+				document.getElementById('hint').style.display = 'none';
+				document.getElementById('ui').style.display = 'block';
+
+				const uintView = new Uint32Array(buffer);
+				const floatView = new Float32Array(buffer, 8);
+				const width = uintView[0];
+				const height = uintView[1];
+
+				const data = floatView;
+				hdrImage = {
+					width,
+					height,
+					data,
+				};
+				mapImage();
+			}
+
+			function mapImage() {
+				ldrImage = new OffscreenCanvas(hdrImage.width, hdrImage.height);
+				const ldrData = ctx.createImageData(hdrImage.width, hdrImage.height, { colorSpace: 'srgb' });
+				for (let y = 0; y < hdrImage.height; y++) {
+					for (let x = 0; x < hdrImage.width; x++) {
+						const i = (y * hdrImage.width + x) * 4;
+						const j = i;
+
+						let r = mapParams.red * map(hdrImage.data[j + 0], mapParams.low, mapParams.high);
+						let g = mapParams.green * map(hdrImage.data[j + 1], mapParams.low, mapParams.high);
+						let b = mapParams.blue * map(hdrImage.data[j + 2], mapParams.low, mapParams.high);
+						if (mapParams.red + mapParams.green + mapParams.blue == 1) {
+							r = g = b = Math.max(r, g, b);
+						}
+						ldrData.data[i + 0] = 0xff * r;
+						ldrData.data[i + 1] = 0xff * g;
+						ldrData.data[i + 2] = 0xff * b;
+						ldrData.data[i + 3] = 0xff;
+					}
+				}
+				ldrImage.getContext('2d').putImageData(ldrData, 0, 0);
+			}
+
+			function map(t, min, max) {
+				return clamp((t - min) / (max - min));
+			}
+
+			function clamp(t, min = 0, max = 1) {
+				return Math.min(Math.max(t, min), max);
+			}
+			draw();
+		</script>
+	</body>
+</html>

@@ -1,6 +1,7 @@
 local/**
 .shadercache/**
 *.exe
+/Project01
 *.f32
 
 *.blend1

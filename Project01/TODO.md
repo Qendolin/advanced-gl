@@ -1,7 +1,7 @@
-- Cache Shader Binary
 - Point Light Radius
 - Scalable AO
 - Shadow Frustum Fitting
 - Cascaded Shadows
 - Normal Mapping
 - Parallax corrected cubemap reflections
+- Transparency

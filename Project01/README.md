@@ -10,6 +10,8 @@ System Requirements:
 Use `go run .` to start the demo.   
 **The first compilation might take a few minutes!!**
 
+You can also download one of the prebuilt binaries from GitHub, just make sure to place them next to the `assets` folder.
+
 There are two launch options:
 
 - `-disable-shader-cache`: To disable the usage of the `.shadercache` folder.

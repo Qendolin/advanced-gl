@@ -96,7 +96,7 @@ func Perpendicular(v mgl32.Vec3) mgl32.Vec3 {
 	}
 	e := mgl32.Vec3{}
 	e[index] = 1
-	return e
+	return v.Cross(e)
 }
 
 func LightAttenuationRadius(c mgl32.Vec3, a float32) float32 {

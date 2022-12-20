@@ -879,6 +879,7 @@ func Draw(ctx Context) {
 	DrawBloom()
 
 	// Post Processing
+	GlState.SetEnabled()
 	gl.PushDebugGroup(gl.DEBUG_SOURCE_APPLICATION, 999, -1, gl.Str("Draw PostFx\x00"))
 	GlState.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0)
 	s.postShader.Bind()

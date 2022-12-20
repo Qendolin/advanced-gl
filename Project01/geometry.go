@@ -58,27 +58,30 @@ func (vbo *buffer) AllocateEmpty(size int, flags int) {
 	if vbo.immutable {
 		log.Panicf("VBO is immutable")
 	}
-	vbo.checkSmallAllocation(size)
+	vbo.checkAllocationSize(size)
 	gl.NamedBufferStorage(vbo.glId, size, nil, uint32(flags))
 	vbo.size = size
 	vbo.flags = uint32(flags)
 	vbo.immutable = true
 }
 
-func (vbo *buffer) checkSmallAllocation(size int) {
-	limit := 1024 * 4
-	if size > limit {
-		return
+func (vbo *buffer) checkAllocationSize(size int) {
+	lowerLimit := 1024 * 4
+	upperLimit := 1024 * 1000 * 1000
+	if size < lowerLimit {
+		msg := fmt.Sprintf("Small buffer allocation: %v < %v bytes\x00", size, lowerLimit)
+		gl.DebugMessageInsert(gl.DEBUG_SOURCE_APPLICATION, gl.DEBUG_TYPE_PERFORMANCE, 1, gl.DEBUG_SEVERITY_NOTIFICATION, -1, gl.Str(msg))
+	} else if size > upperLimit {
+		msg := fmt.Sprintf("Large buffer allocation: %v > %v bytes\x00", size, upperLimit)
+		gl.DebugMessageInsert(gl.DEBUG_SOURCE_APPLICATION, gl.DEBUG_TYPE_PERFORMANCE, 1, gl.DEBUG_SEVERITY_NOTIFICATION, -1, gl.Str(msg))
 	}
-	msg := fmt.Sprintf("Small buffer allocation: %v < %v bytes\x00", size, limit)
-	gl.DebugMessageInsert(gl.DEBUG_SOURCE_APPLICATION, gl.DEBUG_TYPE_PERFORMANCE, 1, gl.DEBUG_SEVERITY_NOTIFICATION, -1, gl.Str(msg))
 }
 
 func (vbo *buffer) AllocateEmptyMutable(size int, usage int) {
 	if vbo.immutable {
 		log.Panicf("VBO is immutable")
 	}
-	vbo.checkSmallAllocation(size)
+	vbo.checkAllocationSize(size)
 	gl.NamedBufferData(vbo.glId, size, nil, uint32(usage))
 	vbo.flags = uint32(usage)
 	vbo.size = size
@@ -92,7 +95,7 @@ func (vbo *buffer) Allocate(data any, flags int) {
 	if size == -1 {
 		log.Panicf("%v does not have a fixed size", data)
 	}
-	vbo.checkSmallAllocation(size)
+	vbo.checkAllocationSize(size)
 	gl.NamedBufferStorage(vbo.glId, size, Pointer(data), uint32(flags))
 	vbo.size = size
 	vbo.flags = uint32(flags)
@@ -107,7 +110,7 @@ func (vbo *buffer) AllocateMutable(data any, usage int) {
 	if size == -1 {
 		log.Panicf("%v does not have a fixed size", data)
 	}
-	vbo.checkSmallAllocation(size)
+	vbo.checkAllocationSize(size)
 	gl.NamedBufferData(vbo.glId, size, Pointer(data), uint32(usage))
 	vbo.flags = uint32(usage)
 	vbo.size = size

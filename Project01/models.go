@@ -344,6 +344,11 @@ func LoadTextureImage(p string) (*image.RGBA, error) {
 	if err != nil {
 		return nil, err
 	}
+	if fi, err := file.Stat(); err == nil && fi.IsDir() {
+		return nil, os.ErrNotExist
+	} else if err != nil {
+		return nil, err
+	}
 	defer file.Close()
 	raw, _, err := image.Decode(file)
 	if err != nil {
@@ -397,20 +402,28 @@ func (builder *RenderBatchBuilder) AddMesh(mesh Mesh) {
 	builder.indexSize += indexSize
 }
 
-func (builder *RenderBatchBuilder) AddMaterial(material SceneMaterial, root string) error {
+func (builder *RenderBatchBuilder) AddMaterial(material SceneMaterial, root string) (err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("could not load material %q: %w", material.Name, err)
+		}
+	}()
+
 	for _, m := range builder.materials {
 		if m.Name == material.Name {
 			return fmt.Errorf("material %q is already in batch", material.Name)
 		}
 	}
 
-	albedo, err := LoadTextureImage(path.Join(root, material.AlbedoTexture+".png"))
+	fileExt := decideTextureFileExtension(path.Join(root, material.AlbedoTexture))
+
+	albedo, err := LoadTextureImage(path.Join(root, material.AlbedoTexture+fileExt))
 	if errors.Is(err, os.ErrNotExist) {
 		albedo = image.NewRGBA(image.Rect(0, 0, 1, 1))
 	} else if err != nil {
 		return err
 	}
-	normal, err := LoadTextureImage(path.Join(root, material.NormalTexture+".png"))
+	normal, err := LoadTextureImage(path.Join(root, material.NormalTexture+fileExt))
 	if errors.Is(err, os.ErrNotExist) {
 		normal = image.NewRGBA(image.Rect(0, 0, 1, 1))
 		normal.Pix[0] = 255 / 2
@@ -427,6 +440,16 @@ func (builder *RenderBatchBuilder) AddMaterial(material SceneMaterial, root stri
 	builder.mutex.Unlock()
 
 	return nil
+}
+
+func decideTextureFileExtension(base string) string {
+	if fi, err := os.Stat(base + ".png"); err == nil && !fi.IsDir() {
+		return ".png"
+	}
+	if fi, err := os.Stat(base + ".jpg"); err == nil && !fi.IsDir() {
+		return ".jpg"
+	}
+	return ""
 }
 
 func (builder *RenderBatchBuilder) Upload() *RenderBatch {

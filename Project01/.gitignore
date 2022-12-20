@@ -1,0 +1,6 @@
+local/**
+.shadercache/**
+*.exe
+*.f32
+
+*.blend1

@@ -1,7 +1,13 @@
 #version 450 core
 //meta:name geometry_frag
 
+// #define TRANSPARENT_PASS
+
+#ifndef TRANSPARENT_PASS
+
 layout(early_fragment_tests) in;
+
+#endif
 
 layout(location = 0) in vec3 in_view_normal;
 layout(location = 1) in vec3 in_position;
@@ -29,6 +35,13 @@ vec2 packNormal(vec3 n) {
 
 void main() {
   vec4 albedo = texture(u_texture, in_uv);
+
+#ifdef TRANSPARENT_PASS
+
+  if(albedo.a <= 0.5) discard;
+
+#endif
+
   g_position = in_position;
   g_normal.xy = packNormal(normalize(in_view_normal));
   g_albedo = albedo.rgb;

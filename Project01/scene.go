@@ -32,6 +32,7 @@ type scene struct {
 	shadowCasters    []*ShadowCaster
 
 	geometryShader              UnboundShaderPipeline
+	geometryTrasparencyShader   UnboundShaderPipeline
 	pointLightShader            UnboundShaderPipeline
 	pointLightDebugVolumeShader UnboundShaderPipeline
 	orthoLightShader            UnboundShaderPipeline
@@ -265,6 +266,12 @@ loading:
 	geomPipeline := NewPipeline()
 	geomPipeline.Attach(vertSh, gl.VERTEX_SHADER_BIT)
 	geomPipeline.Attach(fragSh, gl.FRAGMENT_SHADER_BIT)
+	if err := fragSh.CompileWith(map[string]string{"TRANSPARENT_PASS": "true"}); err != nil {
+		log.Panic(err)
+	}
+	geomTransPipeline := NewPipeline()
+	geomTransPipeline.Attach(vertSh, gl.VERTEX_SHADER_BIT)
+	geomTransPipeline.Attach(fragSh, gl.FRAGMENT_SHADER_BIT)
 
 	vertSh = NewShader(Res_ShadowVshSrc, gl.VERTEX_SHADER)
 	if err := vertSh.Compile(); err != nil {
@@ -543,6 +550,7 @@ loading:
 		shadowCasters:    shadowCasters,
 
 		geometryShader:              geomPipeline,
+		geometryTrasparencyShader:   geomTransPipeline,
 		pointLightShader:            pointLightPipeline,
 		pointLightDebugVolumeShader: lightDebugVolumePipeline,
 		orthoLightShader:            orthoLightPipeline,
@@ -560,7 +568,7 @@ loading:
 
 		projMat:   projMat,
 		viewMat:   viewMat,
-		camPos:    mgl32.Vec3{-15, 4, 0},
+		camPos:    mgl32.Vec3{-8.5, 7, 0},
 		camOrient: mgl32.Vec3{33 * Deg2Rad, 90 * Deg2Rad, 0},
 
 		gBuffer:     gBuffer,
@@ -621,6 +629,7 @@ func Draw(ctx Context) {
 		s.viewMat = camQuat.Mat4().Mul4(mgl32.Translate3D(-s.camPos[0], -s.camPos[1], -s.camPos[2]))
 	}
 
+	// Geometry
 	gl.PushDebugGroup(gl.DEBUG_SOURCE_APPLICATION, 999, -1, gl.Str("Draw Geometry\x00"))
 	s.geometryShader.Get(gl.VERTEX_SHADER).SetUniform("u_view_projection_mat", s.projMat.Mul4(s.viewMat))
 	s.geometryShader.Get(gl.VERTEX_SHADER).SetUniform("u_view_mat", s.viewMat)
@@ -645,12 +654,21 @@ func Draw(ctx Context) {
 	s.batch.CommandBuffer.Bind(gl.DRAW_INDIRECT_BUFFER)
 	GlState.ClearColor(0, 0, 0, 0)
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
-	for _, sm := range s.scene.Materials {
-		for i, tex := range s.batch.MaterialTextures[sm.Name] {
+	transparentPass := false
+	for _, mBatch := range s.batch.MaterialBatches {
+		if mBatch.Transparent && !transparentPass && ui.enableTransparency {
+			// Transparent materials come last
+			transparentPass = true
+			GlState.Enable(Blend)
+			GlState.BlendFunc(BlendOne, BlendZero)
+			s.geometryTrasparencyShader.Bind()
+		}
+
+		for i, tex := range mBatch.Textures {
 			tex.Bind(i)
 			s.textureSampler.Bind(i)
 		}
-		commads := s.batch.MaterialCommandRanges[sm.Name]
+		commads := mBatch.CommandRange
 		gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT, gl.PtrOffset(commads[0]), int32(commads[1]), 0)
 	}
 	if ui.wireframe {

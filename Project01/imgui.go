@@ -58,10 +58,10 @@ func NewImGui() *ImGui {
 	}
 	shader.Attach(fragSh, gl.FRAGMENT_SHADER_BIT)
 
-	image := io.Fonts().TextureDataAlpha8()
+	image := io.Fonts().TextureDataRGBA32()
 	atlas := NewTexture(gl.TEXTURE_2D)
-	atlas.Allocate(0, gl.R8, image.Width, image.Height, 0)
-	atlas.Load(0, image.Width, image.Height, 0, gl.RED, (*byte)(image.Pixels))
+	atlas.Allocate(0, gl.RGBA32F, image.Width, image.Height, 0)
+	atlas.Load(0, image.Width, image.Height, 0, gl.RGBA, (*byte)(image.Pixels))
 	atlas.GenerateMipmap()
 	io.Fonts().SetTextureID(imgui.TextureID(atlas.Id()))
 

@@ -19,6 +19,7 @@ type uiscene struct {
 	wireframe           bool
 	enableDirectDraw    bool
 	accuratePerformance bool
+	enableTransparency  bool
 	bufferViewIndex     int
 	bufferViews         []string
 
@@ -113,6 +114,7 @@ type SceneSpotLight struct {
 var uiDefaults = uiscene{
 	enableDirectDraw:    true,
 	accuratePerformance: true,
+	enableTransparency:  true,
 
 	bufferViews: []string{"None", "Final", "Position", "Normal", "Albedo", "Depth", "AO", "Bloom", "Stencil"},
 
@@ -229,6 +231,7 @@ func DrawUi() {
 	i.Checkbox("Direct Draw", &ui.enableDirectDraw)
 	i.SameLine()
 	i.Checkbox("Accurate Performance", &ui.accuratePerformance)
+	i.Checkbox("Transparent Materials", &ui.enableTransparency)
 	if i.Button("Dump Buffers (Ctrl+F11)") {
 		DumpFramebuffers()
 	}
@@ -544,6 +547,14 @@ func DrawUi() {
 	for j, sc := range s.shadowCasters {
 		textureNames = append(textureNames, fmt.Sprintf("Shadow Map %d", j))
 		textureIds = append(textureIds, sc.ShadowMap.GetTexture(gl.DEPTH_ATTACHMENT).Id())
+	}
+
+	for _, mat := range s.scene.Materials {
+		batchMat := s.batch.ByName(mat.Name)
+		albedoId := batchMat.Textures[0].Id()
+		normalId := batchMat.Textures[1].Id()
+		textureNames = append(textureNames, mat.AlbedoTexture, mat.NormalTexture)
+		textureIds = append(textureIds, albedoId, normalId)
 	}
 
 	if i.BeginCombo("Texture", textureNames[ui.texturePreviewIndex]) {

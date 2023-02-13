@@ -28,7 +28,8 @@ vec3 unpackNormal(vec2 n) {
 
 float linearize_depth(float d, float n, float f)
 {
-    return (2.0 * n) / (f + n - d * (f - n));
+	float ndc = d * 2.0 - 1.0; 
+    return (2.0 * n * f) / (f + n - ndc * (f - n));
 }
 
 void main() {
@@ -43,7 +44,7 @@ void main() {
 	} else if (u_sampler == 3) {
 		result = texture(g_albedo, in_uv).rgb;
 	} else if (u_sampler == 4) {
-		result = vec3(linearize_depth(texture(g_depth, in_uv).x, 0.1, 1000));
+		result = vec3(linearize_depth(texture(g_depth, in_uv).x, 0.1, 1000.) / 1000.);
 	} else if (u_sampler == 5) {
 		result = texture(u_ao, in_uv).rrr;
 	} else if (u_sampler == 6) {

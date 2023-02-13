@@ -12,6 +12,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"sort"
 	"sync"
 	"unsafe"
 
@@ -63,6 +64,7 @@ type SceneMaterial struct {
 	Name          string
 	AlbedoTexture string
 	NormalTexture string
+	Transparent   bool
 }
 
 func (o SceneObject) Transform() mgl32.Mat4 {
@@ -232,6 +234,7 @@ func LoadScene(r io.Reader) (*Scene, error) {
 			Name          string `json:"name"`
 			AlbedoTexture string `json:"albedoTexture"`
 			NormalTexture string `json:"normalTexture"`
+			Transparent   bool   `json:"transparent"`
 		} `json:"materials"`
 	}{}
 	err = json.Unmarshal(data, &sceneModel)
@@ -303,11 +306,12 @@ func LoadScene(r io.Reader) (*Scene, error) {
 		}
 	}
 
-	for _, o := range sceneModel.Materials {
+	for _, m := range sceneModel.Materials {
 		scene.Materials = append(scene.Materials, SceneMaterial{
-			Name:          o.Name,
-			AlbedoTexture: o.AlbedoTexture,
-			NormalTexture: o.NormalTexture,
+			Name:          m.Name,
+			AlbedoTexture: m.AlbedoTexture,
+			NormalTexture: m.NormalTexture,
+			Transparent:   m.Transparent,
 		})
 	}
 
@@ -456,13 +460,15 @@ func (builder *RenderBatchBuilder) Upload() *RenderBatch {
 	if builder.vertexSize == 0 {
 		log.Panic("builder has no data to upload")
 	}
-	locations := make(map[string]MeshLocation, len(builder.meshes))
+	meshLocations := make([]MeshLocation, len(builder.meshes))
+	meshIndex := make(map[string]int, len(builder.meshes))
 
 	vertices := NewBuffer()
 	vertices.AllocateEmpty(builder.vertexSize, gl.DYNAMIC_STORAGE_BIT)
 	offset := 0
 	for i, m := range builder.meshes {
-		locations[m.Name] = MeshLocation{
+		meshIndex[m.Name] = i
+		meshLocations[i] = MeshLocation{
 			BaseVertex: int32(offset / int(unsafe.Sizeof(Vertex{}))),
 		}
 		vertices.Write(offset, m.Vertices)
@@ -480,10 +486,9 @@ func (builder *RenderBatchBuilder) Upload() *RenderBatch {
 	elements.AllocateEmpty(builder.indexSize, gl.DYNAMIC_STORAGE_BIT)
 	offset = 0
 	for i, m := range builder.meshes {
-		loc := locations[m.Name]
+		loc := &meshLocations[i]
 		loc.BaseIndex = uint32(offset) / bytesPerIndex
 		loc.Indices = uint32(len(m.Indices) / int(bytesPerIndex))
-		locations[m.Name] = loc
 
 		elements.Write(offset, m.Indices)
 		offset = builder.indexOffsets[i]
@@ -513,8 +518,16 @@ func (builder *RenderBatchBuilder) Upload() *RenderBatch {
 
 	builder.meshes = nil
 
-	textures := map[string][]UnboundTexture{}
-	for _, mat := range builder.materials {
+	materialsBatches := make([]MaterialBatch, len(builder.materials))
+	materialIndex := make(map[string]int, len(builder.materials))
+
+	for i, mat := range builder.materials {
+		batch := &materialsBatches[i]
+		batch.Name = mat.Name
+		batch.Transparent = mat.Transparent
+		batch.instances = []MeshInstance{}
+		batch.CommandRange = [2]int{}
+
 		albedo := NewTexture(gl.TEXTURE_2D)
 		albedoImg := builder.textures[mat.AlbedoTexture]
 		albedo.Allocate(0, gl.SRGB8_ALPHA8, albedoImg.Rect.Dx(), albedoImg.Rect.Dy(), 0)
@@ -524,22 +537,31 @@ func (builder *RenderBatchBuilder) Upload() *RenderBatch {
 		normalImg := builder.textures[mat.NormalTexture]
 		normal.Allocate(1, gl.RGB8, normalImg.Rect.Dx(), normalImg.Rect.Dy(), 0)
 		normal.Load(0, normalImg.Rect.Dx(), normalImg.Rect.Dy(), 0, gl.RGBA, normalImg.Pix)
-		textures[mat.Name] = []UnboundTexture{albedo, normal}
+		batch.Textures = []UnboundTexture{albedo, normal}
+	}
+
+	// Sort transparent materials to the end
+	sort.Slice(materialsBatches, func(i, j int) bool {
+		return !materialsBatches[i].Transparent && materialsBatches[j].Transparent
+	})
+
+	for i, mBatch := range materialsBatches {
+		materialIndex[mBatch.Name] = i
 	}
 
 	builder.materials = nil
 	builder.textures = nil
 
 	batch := &RenderBatch{
-		MeshBuffer:            vertices,
-		ElementBuffer:         elements,
-		AttributesBuffer:      attributes,
-		VertexArray:           vao,
-		MaterialTextures:      textures,
-		locations:             locations,
-		instances:             map[string][]MeshInstance{},
-		CommandBuffer:         commands,
-		MaterialCommandRanges: map[string][2]int{},
+		MeshBuffer:       vertices,
+		ElementBuffer:    elements,
+		AttributesBuffer: attributes,
+		VertexArray:      vao,
+		MaterialBatches:  materialsBatches,
+		MaterialIndex:    materialIndex,
+		meshLocations:    meshLocations,
+		meshIndex:        meshIndex,
+		CommandBuffer:    commands,
 	}
 
 	return batch
@@ -552,19 +574,26 @@ type MeshLocation struct {
 }
 
 type RenderBatch struct {
-	VertexArray           UnboundVertexArray
-	AttributesBuffer      UnboundBuffer
-	MeshBuffer            UnboundBuffer
-	ElementBuffer         UnboundBuffer
-	CommandBuffer         UnboundBuffer
-	MaterialTextures      map[string][]UnboundTexture
-	TotatCommandRange     [2]int
-	MaterialCommandRanges map[string][2]int
-	instances             map[string][]MeshInstance
-	locations             map[string]MeshLocation
-
+	VertexArray        UnboundVertexArray
+	AttributesBuffer   UnboundBuffer
+	MeshBuffer         UnboundBuffer
+	ElementBuffer      UnboundBuffer
+	CommandBuffer      UnboundBuffer
+	TotatCommandRange  [2]int
+	MaterialBatches    []MaterialBatch
+	MaterialIndex      map[string]int
+	meshLocations      []MeshLocation
+	meshIndex          map[string]int
 	attributesPosition int
 	commands           []DrawElementsIndirectCommand
+}
+
+type MaterialBatch struct {
+	Name         string
+	Transparent  bool
+	Textures     []UnboundTexture
+	CommandRange [2]int
+	instances    []MeshInstance
 }
 
 type InstanceAttributes struct {
@@ -572,16 +601,15 @@ type InstanceAttributes struct {
 }
 
 type MeshInstance struct {
-	Mesh           string
-	Material       string
+	Mesh           int
 	AttributeIndex int
 }
 
 func (batch *RenderBatch) Add(mesh, material string, attributes InstanceAttributes) {
-	if _, ok := batch.locations[mesh]; !ok {
+	if _, ok := batch.meshIndex[mesh]; !ok {
 		log.Panicf("Mesh %q is not contained in this batch", mesh)
 	}
-	if _, ok := batch.MaterialTextures[material]; !ok {
+	if _, ok := batch.MaterialIndex[material]; !ok {
 		log.Printf("Material %q is not contained in this batch\n", material)
 	}
 	vbo := batch.AttributesBuffer
@@ -590,14 +618,17 @@ func (batch *RenderBatch) Add(mesh, material string, attributes InstanceAttribut
 		batch.VertexArray.BindBuffer(1, vbo, 0, int(unsafe.Sizeof(InstanceAttributes{})))
 	}
 	vbo.Write(batch.attributesPosition, []InstanceAttributes{attributes})
-	list := batch.instances[material]
-	batch.instances[material] = append(list, MeshInstance{
-		Mesh:           mesh,
-		Material:       material,
+	mBatch := batch.ByName(material)
+	mBatch.instances = append(mBatch.instances, MeshInstance{
+		Mesh:           batch.meshIndex[mesh],
 		AttributeIndex: batch.attributesPosition / size,
 	})
 
 	batch.attributesPosition += int(size)
+}
+
+func (batch *RenderBatch) ByName(material string) *MaterialBatch {
+	return &batch.MaterialBatches[batch.MaterialIndex[material]]
 }
 
 type DrawElementsIndirectCommand struct {
@@ -614,11 +645,12 @@ func (batch *RenderBatch) GenerateDrawCommands() {
 	}
 	batch.commands = batch.commands[:0]
 
-	for material, instances := range batch.instances {
+	for i := range batch.MaterialBatches {
+		mBatch := &batch.MaterialBatches[i]
 		start := len(batch.commands) * int(unsafe.Sizeof(DrawElementsIndirectCommand{}))
-		batch.MaterialCommandRanges[material] = [2]int{start, len(instances)}
-		for _, instance := range instances {
-			loc := batch.locations[instance.Mesh]
+		mBatch.CommandRange = [2]int{start, len(mBatch.instances)}
+		for _, instance := range mBatch.instances {
+			loc := batch.meshLocations[instance.Mesh]
 			cmd := DrawElementsIndirectCommand{
 				Count:         loc.Indices,
 				InstanceCount: 1,

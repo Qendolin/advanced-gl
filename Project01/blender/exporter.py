@@ -146,11 +146,13 @@ class ObjectExport(bpy.types.Operator):
         if self.filepath.lower().endswith(".geo"):
             self.filepath = self.filepath[:-4]
 
+        obs = [ob.evaluated_get(deps)
+               for ob in context.selected_objects if not ob.hide_render]
+        obs.sort(key=lambda ob: ob.name)
+
         if self.write_geometry:
             with open(self.filepath + ".geo", 'wb') as file:
-                all_obs = [
-                    ob.evaluated_get(deps) for ob in context.selected_objects if ob.type == 'MESH']
-                meshes = set([ob.data for ob in all_obs])
+                meshes = set([ob.data for ob in obs if ob.type == 'MESH'])
                 count = len(meshes)
                 context.window_manager.progress_begin(0, count)
                 file.write(struct.pack("<I", count))
@@ -193,17 +195,16 @@ class ObjectExport(bpy.types.Operator):
 
         if self.write_scene:
             with open(self.filepath + ".scn", 'w') as file:
-                obs = context.selected_objects
                 out_objects = []
                 out_lights = []
                 materials = set()
                 for ob in obs:
-                    ob = ob.evaluated_get(deps)
                     mat = None
                     if len(ob.material_slots) > 0:
                         mat = ob.material_slots[0].material
                         materials.add(mat)
-                    pos = list(transform @ ob.location)
+                    pos = [round(co, 4)
+                           for co in list(transform @ ob.location)]
                     scale = list(scale_transform @ ob.scale)
                     rot = ob.rotation_euler.to_quaternion()
                     if ob.rotation_mode == "QUATERNION":
@@ -212,8 +213,8 @@ class ObjectExport(bpy.types.Operator):
                         rot = ob.rotation_axis_angle.to_quaternion()
                     rotAxis = scale_transform.copy(
                     ) @ Vector([rot.x, rot.y, rot.z])
-                    rot = list(Quaternion(
-                        [rot.w, rotAxis.x, rotAxis.y, rotAxis.z]))
+                    rot = [round(co, 4) for co in list(Quaternion(
+                        [rot.w, rotAxis.x, rotAxis.y, rotAxis.z]))]
                     if ob.type == "MESH":
                         out_objects.append({
                             "name": ob.name,
@@ -278,6 +279,7 @@ class ObjectExport(bpy.types.Operator):
                         if texImg is not None:
                             out_material["albedoTexture"] = pathlib.PurePath(
                                 texImg.image.filepath).stem
+                            out_material["transparent"] = texImg.image.alpha_mode != "NONE"
                         if normImg is not None:
                             out_material["normalTexture"] = pathlib.PurePath(
                                 normImg.image.filepath).stem
@@ -288,7 +290,7 @@ class ObjectExport(bpy.types.Operator):
                     out_materials.append(out_material)
 
                 json.dump({"lights": out_lights, "objects": out_objects, "materials": out_materials},
-                          file, indent=4)
+                          file, indent="\t")
         print("finished")
         return {'FINISHED'}
 

@@ -1,0 +1,145 @@
+{
+	"lights": [
+		{
+			"name": "Spot",
+			"type": "SPOT",
+			"position": [
+				0.0,
+				25.2675,
+				0.0
+			],
+			"color": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"radius": 0,
+			"attenuation": 0.0,
+			"shadow": true,
+			"outerAngle": 1.0365331172943115,
+			"innerAngle": 0.881053143521946,
+			"rotation": [
+				1.0,
+				0.0,
+				0.0,
+				0.0
+			],
+			"power": 2000.0
+		},
+		{
+			"name": "Sun",
+			"type": "SUN",
+			"position": [
+				0.0,
+				7.7891,
+				0.0
+			],
+			"color": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"radius": 0,
+			"attenuation": 0.0128,
+			"shadow": true,
+			"power": 0.5,
+			"rotation": [
+				0.678,
+				0.1065,
+				-0.2902,
+				-0.6669
+			]
+		}
+	],
+	"objects": [
+		{
+			"name": "buddha_bottom",
+			"mesh": "Cube.005",
+			"position": [
+				-5.329,
+				1.3408,
+				-5.0579
+			],
+			"rotation": [
+				1.0,
+				0.0,
+				0.0,
+				0.0
+			],
+			"scale": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"material": "Material"
+		},
+		{
+			"name": "buddha_top",
+			"mesh": "Cube.002",
+			"position": [
+				-5.329,
+				1.3408,
+				-5.0579
+			],
+			"rotation": [
+				1.0,
+				0.0,
+				0.0,
+				0.0
+			],
+			"scale": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"material": "Material"
+		},
+		{
+			"name": "floor",
+			"mesh": "Cube.001",
+			"position": [
+				0.0,
+				0.0,
+				0.0
+			],
+			"rotation": [
+				1.0,
+				0.0,
+				0.0,
+				0.0
+			],
+			"scale": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"material": "Material"
+		},
+		{
+			"name": "teapot",
+			"mesh": "Cube.004",
+			"position": [
+				-3.028,
+				0.0,
+				6.0571
+			],
+			"rotation": [
+				1.0,
+				0.0,
+				0.0,
+				0.0
+			],
+			"scale": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"material": "Material"
+		}
+	],
+	"materials": [
+		{
+			"name": "Material"
+		}
+	]
+}

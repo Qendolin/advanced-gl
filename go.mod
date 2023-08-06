@@ -8,6 +8,11 @@ require (
 	github.com/go-gl/mathgl v1.0.0
 )
 
-require github.com/inkyblackness/imgui-go/v4 v4.5.0
+require (
+	github.com/andybalholm/brotli v1.0.5
+	github.com/icza/bitio v1.1.0
+	github.com/inkyblackness/imgui-go/v4 v4.5.0
+	github.com/pierrec/lz4/v4 v4.1.18
+)
 
 require golang.org/x/image v0.0.0-20190321063152-3fc05d484e9f // indirect

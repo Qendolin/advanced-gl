@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -18,7 +19,13 @@ import (
 
 	"github.com/go-gl/gl/v4.5-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/pierrec/lz4/v4"
 )
+
+const MagicNumberLZ4 = 0x184d2204
+const MagicNumberGEO = 0xc9dae18c
+
+var lz4header = []byte{0x04, 0x22, 0x4d, 0x18}
 
 type Mesh struct {
 	Name         string
@@ -142,6 +149,18 @@ func LoadMeshes(r io.Reader) (models []Mesh, err error) {
 		}
 	}()
 
+	var magic int
+	if !br.ReadUInt32(&magic) {
+		return nil, fmt.Errorf("expected one uint32 for the file identifier; byte 0x%08x", br.LastIndex)
+	}
+
+	if magic == MagicNumberLZ4 {
+		lz4decoder := lz4.NewReader(io.MultiReader(bytes.NewReader(lz4header), br.Src))
+		return LoadMeshes(lz4decoder)
+	} else if magic != MagicNumberGEO {
+		return nil, fmt.Errorf("expected magic number 0x%08x (lz4) or 0x%08x (geo) but was 0x%08x; byte 0x%08x", MagicNumberLZ4, MagicNumberGEO, magic, br.LastIndex)
+	}
+
 	var count int
 	if !br.ReadUInt32(&count) {
 		return nil, fmt.Errorf("expected one uint32 for object count; byte 0x%08x", br.LastIndex)
@@ -151,7 +170,6 @@ func LoadMeshes(r io.Reader) (models []Mesh, err error) {
 	if !br.ReadRef(offsets) {
 		return nil, fmt.Errorf("expected %d uint32 for offsets; byte 0x%08x", count, br.LastIndex)
 	}
-	check := binary.LittleEndian.Uint32([]byte{0xde, 0xad, 0xbe, 0xef})
 	models = make([]Mesh, count)
 	for i := 0; i < count; i++ {
 		header := struct {
@@ -164,7 +182,7 @@ func LoadMeshes(r io.Reader) (models []Mesh, err error) {
 			return nil, fmt.Errorf("expected mesh header; index %d/%d, byte 0x%08x", i+1, count, br.LastIndex)
 		}
 
-		if header.Check != check {
+		if header.Check != MagicNumberGEO {
 			return nil, fmt.Errorf("mesh header is corrupt; index %d/%d, byte 0x%08x", i+1, count, br.LastIndex)
 		}
 
@@ -204,7 +222,18 @@ func LoadMeshes(r io.Reader) (models []Mesh, err error) {
 }
 
 func LoadScene(r io.Reader) (*Scene, error) {
-	data, err := io.ReadAll(r)
+	header := make([]byte, 4)
+	_, err := io.ReadFull(r, header)
+	if err != nil {
+		return nil, err
+	}
+
+	if bytes.Equal(header, lz4header) {
+		lz4decoder := lz4.NewReader(io.MultiReader(bytes.NewReader(lz4header), r))
+		return LoadScene(lz4decoder)
+	}
+
+	data, err := io.ReadAll(io.MultiReader(bytes.NewReader(header), r))
 	if err != nil {
 		return nil, err
 	}

@@ -12,7 +12,7 @@ from .geo_exporter import write_geometry
 from .scn_exporter import write_scene
 
 bl_info = {
-    "name": "Geo Format Exporter",
+    "name": "Geo Format Exporter 01",
     "description": "Writes geometry format to disk, based on exporter by Mark Kughler",
     "author": "Qendolin",
     "version": (1, 0),
@@ -29,7 +29,7 @@ bl_info = {
 
 
 def menu_func_export(self, context):
-    self.layout.operator(ObjectExport.bl_idname, text="Geometry Export (.geo)")
+    self.layout.operator(ObjectExport.bl_idname, text="Geometry Export 01 (.geo)")
 
 
 def install_lz4():
@@ -62,8 +62,8 @@ def install_lz4():
 @orientation_helper(axis_forward='-Z', axis_up='Y')
 class ObjectExport(bpy.types.Operator):
     """My object export script"""
-    bl_idname = "object.export_geo"
-    bl_label = "Geo Format Export"
+    bl_idname = "object.export_geo_01"
+    bl_label = "Geo Format Export 01"
     bl_options = {'REGISTER', 'UNDO'}
 
     write_geometry: bpy.props.BoolProperty(

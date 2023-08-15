@@ -15,4 +15,7 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.18
 )
 
-require golang.org/x/image v0.0.0-20190321063152-3fc05d484e9f // indirect
+require (
+	golang.org/x/exp v0.0.0-20230801115018-d63ba01acd4b
+	golang.org/x/image v0.0.0-20190321063152-3fc05d484e9f // indirect
+)

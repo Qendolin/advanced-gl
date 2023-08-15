@@ -17,8 +17,8 @@ layout(location = 0) out vec3 g_position;
 layout(location = 1) out vec2 g_normal;
 layout(location = 2) out vec3 g_albedo;
 
-layout(location = 0) uniform sampler2D u_texture;
-layout(location = 1) uniform sampler2D u_normal;
+layout(binding = 0) uniform sampler2D u_texture;
+layout(binding = 1) uniform sampler2D u_normal;
 
 // Octahedral Normal Packing
 // Credit: https://discourse.panda3d.org/t/glsl-octahedral-normal-packing/15233

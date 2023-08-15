@@ -81,7 +81,7 @@ func (o SceneObject) Transform() mgl32.Mat4 {
 	return translate.Mul4(rotate).Mul4(scale)
 }
 
-func (br *BinaryReader) Read(n int) (ok bool) {
+func (br *BinaryReader) ReadBytes(n int) (ok bool) {
 	if br.Err != nil {
 		return false
 	}
@@ -104,8 +104,12 @@ func (br *BinaryReader) Read(n int) (ok bool) {
 	return br.Err == nil
 }
 
+func (br *BinaryReader) Read(p []byte) (n int, err error) {
+	return br.Src.Read(p)
+}
+
 func (br *BinaryReader) ReadUInt16(i *int) (ok bool) {
-	if !br.Read(2) {
+	if !br.ReadBytes(2) {
 		return false
 	}
 	*i = int(br.Order.Uint16(br.buf))
@@ -113,7 +117,7 @@ func (br *BinaryReader) ReadUInt16(i *int) (ok bool) {
 }
 
 func (br *BinaryReader) ReadUInt32(i *int) (ok bool) {
-	if !br.Read(4) {
+	if !br.ReadBytes(4) {
 		return false
 	}
 	*i = int(br.Order.Uint32(br.buf))
@@ -172,53 +176,83 @@ func LoadMeshes(r io.Reader) (models []Mesh, err error) {
 	}
 	models = make([]Mesh, count)
 	for i := 0; i < count; i++ {
-		header := struct {
-			Check       uint32
-			NameLength  uint32
-			VertexCount uint32
-			IndexCount  uint32
-		}{}
-		if !br.ReadRef(&header) {
-			return nil, fmt.Errorf("expected mesh header; index %d/%d, byte 0x%08x", i+1, count, br.LastIndex)
+		mesh, err := LoadMesh(br)
+
+		if err != nil {
+			return nil, fmt.Errorf("error loading mesh at index %d/%d: %w", i+1, count, err)
 		}
 
-		if header.Check != MagicNumberGEO {
-			return nil, fmt.Errorf("mesh header is corrupt; index %d/%d, byte 0x%08x", i+1, count, br.LastIndex)
-		}
-
-		name := make([]byte, header.NameLength)
-		if !br.ReadRef(&name) {
-			return nil, fmt.Errorf("expected %d byte for object name; index %d/%d, byte 0x%08x", header.NameLength, i+1, count, br.LastIndex)
-		}
-
-		vertices := make([]Vertex, header.VertexCount)
-		if !br.ReadRef(&vertices) {
-			return nil, fmt.Errorf("expected %d mesh vertices; name %q, index %d/%d, byte 0x%08x", header.VertexCount, name, i+1, count, br.LastIndex)
-		}
-		indexBytes := header.IndexCount * 2
-		shortIndices := header.IndexCount < 0xffff
-		if !shortIndices {
-			indexBytes *= 2
-		}
-		indices := make([]byte, indexBytes)
-		if !br.ReadRef(&indices) {
-			return nil, fmt.Errorf("expected %d mesh indices; name %q, index %d/%d, byte 0x%08x", header.IndexCount, name, i+1, count, br.LastIndex)
-		}
-		if shortIndices && header.IndexCount%2 == 1 {
-			if !br.Read(2) {
-				return nil, fmt.Errorf("expected index padding; name %q, index %d/%d, byte 0x%08x", name, i+1, count, br.LastIndex)
-			}
-		}
-
-		models[i] = Mesh{
-			Name:         string(name),
-			Vertices:     vertices,
-			Indices:      indices,
-			ShortIndices: header.IndexCount < 0xffff,
-		}
+		models[i] = *mesh
 	}
 
 	return models, nil
+}
+
+func LoadMesh(r io.Reader) (mesh *Mesh, err error) {
+	var br *BinaryReader
+	var ok bool
+
+	if br, ok = r.(*BinaryReader); !ok {
+		br = &BinaryReader{
+			Src:   r,
+			Order: binary.LittleEndian,
+		}
+
+		defer func() {
+			if br.Err != nil {
+				if err == nil {
+					err = br.Err
+				} else {
+					err = fmt.Errorf("%v: %w", err, br.Err)
+				}
+			}
+		}()
+	}
+
+	header := struct {
+		Check       uint32
+		NameLength  uint32
+		VertexCount uint32
+		IndexCount  uint32
+	}{}
+	if !br.ReadRef(&header) {
+		return nil, fmt.Errorf("expected mesh header; byte 0x%08x", br.LastIndex)
+	}
+
+	if header.Check != MagicNumberGEO {
+		return nil, fmt.Errorf("mesh header is corrupt; byte 0x%08x", br.LastIndex)
+	}
+
+	name := make([]byte, header.NameLength)
+	if !br.ReadRef(&name) {
+		return nil, fmt.Errorf("expected %d byte for object name; byte 0x%08x", header.NameLength, br.LastIndex)
+	}
+
+	vertices := make([]Vertex, header.VertexCount)
+	if !br.ReadRef(&vertices) {
+		return nil, fmt.Errorf("expected %d mesh vertices; name %q, byte 0x%08x", header.VertexCount, name, br.LastIndex)
+	}
+	indexBytes := header.IndexCount * 2
+	shortIndices := header.IndexCount < 0xffff
+	if !shortIndices {
+		indexBytes *= 2
+	}
+	indices := make([]byte, indexBytes)
+	if !br.ReadRef(&indices) {
+		return nil, fmt.Errorf("expected %d mesh indices; name %q, byte 0x%08x", header.IndexCount, name, br.LastIndex)
+	}
+	if shortIndices && header.IndexCount%2 == 1 {
+		if !br.ReadBytes(2) {
+			return nil, fmt.Errorf("expected index padding; name %q, byte 0x%08x", name, br.LastIndex)
+		}
+	}
+
+	return &Mesh{
+		Name:         string(name),
+		Vertices:     vertices,
+		Indices:      indices,
+		ShortIndices: header.IndexCount < 0xffff,
+	}, nil
 }
 
 func LoadScene(r io.Reader) (*Scene, error) {

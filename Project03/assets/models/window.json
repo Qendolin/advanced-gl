@@ -1,0 +1,4 @@
+{
+	"mesh": "window.mesh",
+	"material": "../materials/window.json"
+}

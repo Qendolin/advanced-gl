@@ -1,0 +1,7 @@
+{
+	"name": "white_paint",
+	"albedo": "white_paint_albedo.png",
+	"normal": "white_paint_normal.png",
+	"emission": "white_paint_emission.png",
+	"orm": "white_paint_orm.png"
+}

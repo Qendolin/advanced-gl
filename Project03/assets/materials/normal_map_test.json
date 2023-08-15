@@ -1,0 +1,7 @@
+{
+	"name": "normal_map_test",
+	"albedo": "normal_map_test_albedo.png",
+	"normal": "normal_map_test_normal.png",
+	"emission": "normal_map_test_emission.png",
+	"orm": "normal_map_test_orm.png"
+}

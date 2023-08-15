@@ -1,0 +1,7 @@
+{
+	"name": "cobble_pavement",
+	"albedo": "cobble_pavement_albedo.png",
+	"normal": "cobble_pavement_normal.png",
+	"emission": "cobble_pavement_emission.png",
+	"orm": "cobble_pavement_orm.png"
+}

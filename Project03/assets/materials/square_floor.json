@@ -1,0 +1,7 @@
+{
+	"name": "square_floor",
+	"albedo": "square_floor_albedo.png",
+	"normal": "square_floor_normal.png",
+	"emission": "square_floor_emission.png",
+	"orm": "square_floor_orm.png"
+}

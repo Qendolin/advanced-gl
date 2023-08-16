@@ -27,8 +27,8 @@ void main() {
 
   // FIXME: I'm not sure if I should use the inverse transpose or the regular model matrix.
   // LearnOpenGL uses the regular but normals usually require the inverse transpose
-  mat3 normalMatrix = transpose(inverse(mat3(in_model_mat)));
-  // mat3 normalMatrix = mat3(in_model_mat);
+  // mat3 normalMatrix = transpose(inverse(mat3(in_model_mat)));
+  mat3 normalMatrix = mat3(in_model_mat);
 
   vec3 T = normalize(normalMatrix * in_tangent);
   vec3 B = normalize(normalMatrix * in_bitangent);

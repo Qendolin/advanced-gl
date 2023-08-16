@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/go-gl/gl/v4.5-core/gl"
+	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 )
 
@@ -34,6 +35,27 @@ type MaterialDesc struct {
 	Albedo string `json:"albedo"`
 	Normal string `json:"normal"`
 	ORM    string `json:"orm"`
+}
+
+type LoadCallback func(ctx *glfw.Window)
+
+type LoadManger interface {
+	OnLoad(cb LoadCallback)
+	Reload(ctx *glfw.Window)
+}
+
+type SimpleLoadManager struct {
+	cbs []LoadCallback
+}
+
+func (lm *SimpleLoadManager) OnLoad(cb LoadCallback) {
+	lm.cbs = append(lm.cbs, cb)
+}
+
+func (lm *SimpleLoadManager) Reload(ctx *glfw.Window) {
+	for _, cb := range lm.cbs {
+		cb(ctx)
+	}
 }
 
 type DirPack struct {

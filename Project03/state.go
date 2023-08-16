@@ -123,25 +123,42 @@ type GlEnvironment struct {
 	Vendor                     string
 	UseIntelTextureBindingFix  bool
 	IntelTextureBindingTargets map[uint32]uint32
+	Features                   GlFeatures
 }
+
+type GlFeatures struct {
+	MaxTextureMaxAnisotropy float32
+}
+
+const (
+	VendorIntel   = "intel"
+	VendorNvidia  = "ati"
+	VendorAmd     = "ati"
+	VendorUnknown = "unknown"
+)
 
 func GetGlEnv() *GlEnvironment {
 	vendor := string(gl.GoStr(gl.GetString(gl.VENDOR)))
 	vendor = strings.ToLower(strings.TrimSuffix(vendor, "\x00"))
 	if strings.Contains(vendor, "intel") {
-		vendor = "intel"
+		vendor = VendorIntel
 	} else if strings.Contains(vendor, "nvidia ") {
-		vendor = "nvidia"
+		vendor = VendorNvidia
 	} else if strings.Contains(vendor, "ati ") {
-		vendor = "ati"
+		vendor = VendorAmd
 	} else {
-		vendor = "unknown"
+		vendor = VendorUnknown
 	}
+
+	features := GlFeatures{}
+
+	gl.GetFloatv(gl.MAX_TEXTURE_MAX_ANISOTROPY, &features.MaxTextureMaxAnisotropy)
 
 	return &GlEnvironment{
 		Vendor:                     vendor,
-		UseIntelTextureBindingFix:  vendor == "intel",
+		UseIntelTextureBindingFix:  vendor == VendorIntel,
 		IntelTextureBindingTargets: map[uint32]uint32{},
+		Features:                   features,
 	}
 }
 

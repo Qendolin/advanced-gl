@@ -18,10 +18,20 @@ uniform vec3[4] u_light_colors;
 
 const float PI = 3.14159265359;
 
-vec3 getNormalFromMap()
-{
-    vec3 tangentNormal = texture(u_normal, in_uv).xyz * 2.0 - 1.0;
-    return normalize(in_tbn * tangentNormal);
+vec3 transformNormal(vec3 tN) {
+    return normalize(in_tbn * tN);
+}
+
+// Based on https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/course-notes-moving-frostbite-to-pbr-v2.pdf page 92
+float adjustRoughness(vec3 tN, float roughness) {
+    float r = length(tN);
+    if (r < 1.0) {
+        float kappa = (3.0 * r - r * r * r) / (1.0 - r * r);
+        float variance = 1.0 / kappa;
+        // Why is it ok for the roughness to be > 1 ?
+        return sqrt(roughness * roughness + variance);
+    }
+    return roughness;
 }
 
 float DistributionGGX(vec3 N, vec3 H, float roughness)
@@ -51,7 +61,8 @@ float GeometrySchlickGGX(float NdotV, float roughness)
 
 float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 {
-    float NdotV = max(dot(N, V), 0.0);
+    // + 5e-6 to prevent artifacts, value is from https://google.github.io/filament/Filament.html#materialsystem/specularbrdf:~:text=float%20NoV%20%3D%20abs(dot(n%2C%20v))%20%2B%201e%2D5%3B
+    float NdotV = max(dot(N, V), 0.0) + 5e-6;
     float NdotL = max(dot(N, L), 0.0);
     float ggx2 = GeometrySchlickGGX(NdotV, roughness);
     float ggx1 = GeometrySchlickGGX(NdotL, roughness);
@@ -72,12 +83,11 @@ void main()
     float roughness = orm.y;
     float ao        = orm.x;
 
-    vec3 N = getNormalFromMap();
+    vec3 tN = texture(u_normal, in_uv).xyz * 2.0 - 1.0;
+    float br = roughness;
+    roughness = adjustRoughness(tN, roughness);
+    vec3 N = transformNormal(tN);
     vec3 V = normalize(u_camera_position - in_world_position);
-
-    // out_color.rgb = vec3(N.z, N.z * V.z, 0.1);
-    // out_color.a = 1.0;
-    // return;
 
     // calculate reflectance at normal incidence; if dia-electric (like plastic) use F0
     // of 0.04 and if it's a metal, use the albedo color as F0 (metallic workflow)
@@ -101,7 +111,7 @@ void main()
         vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
 
         vec3 numerator    = NDF * G * F;
-        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001; // + 0.0001 to prevent divide by zero
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 1e-5; // + 1e-5 to prevent divide by zero
         vec3 specular = numerator / denominator;
 
         // kS is equal to Fresnel
@@ -118,13 +128,16 @@ void main()
         // scale light by NdotL
         float NdotL = max(dot(N, L), 0.0);
 
+        // The ao term doesn't really belong here, but I like it better that way
+        float occlusion = mix(ao, 1.0, NdotL);
+
         // add to outgoing radiance Lo
-        Lo += (kD * albedo / PI + specular) * radiance * NdotL;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL * occlusion;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
     }
 
     // ambient lighting (note that the next IBL tutorial will replace
     // this ambient lighting with environment lighting).
-    vec3 ambient = vec3(0.01) * albedo * ao;
+    vec3 ambient = vec3(0.04) * albedo * ao;
 
     vec3 color = ambient + Lo;
 

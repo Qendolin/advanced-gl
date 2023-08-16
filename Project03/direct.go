@@ -7,8 +7,6 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 )
 
-// TODO: Direct draw commands for debugging
-// e.g. lines
 type DirectBuffer struct {
 	vao       UnboundVertexArray
 	vbo       UnboundBuffer

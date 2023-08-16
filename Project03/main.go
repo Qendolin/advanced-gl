@@ -3,7 +3,9 @@ package main
 import (
 	_ "embed"
 	"flag"
+	"io"
 	"log"
+	"os"
 	"runtime"
 	"unsafe"
 
@@ -13,34 +15,26 @@ import (
 	im "github.com/inkyblackness/imgui-go/v4"
 )
 
-//go:embed assets/shaders/imgui.vert
-var Res_ImguiVshSrc string
-
-//go:embed assets/shaders/imgui.frag
-var Res_ImguiFshSrc string
-
-//go:embed assets/shaders/pbr.vert
-var Res_PbrVshSrc string
-
-//go:embed assets/shaders/pbr.frag
-var Res_PbrFshSrc string
-
-//go:embed assets/shaders/direct.vert
-var Res_DirectVshSrc string
-
-//go:embed assets/shaders/direct.frag
-var Res_DirectFshSrc string
-
 var Arguments struct {
 	EnableCompatibilityProfile bool
 }
 
 func main() {
+	log.Println("Opening log file")
+
+	logFile, err := os.OpenFile("latest.log", os.O_CREATE|os.O_TRUNC, 0666)
+	check(err)
+	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
+
+	log.Println("Parsing arguments")
+
 	flag.BoolVar(&Arguments.EnableCompatibilityProfile, "enable-compatibility-profile", Arguments.EnableCompatibilityProfile, "")
 	flag.Parse()
 
 	runtime.LockOSThread()
-	err := glfw.Init()
+	log.Println("Initializing GLFW")
+
+	err = glfw.Init()
 	check(err)
 
 	glfw.DefaultWindowHints()
@@ -48,16 +42,19 @@ func main() {
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 5)
 	glfw.WindowHint(glfw.OpenGLDebugContext, glfw.True)
+	glfw.WindowHint(glfw.Maximized, glfw.True)
 	if Arguments.EnableCompatibilityProfile {
 		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCompatProfile)
 	} else {
 		glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	}
+	log.Println("Creating Window")
 	ctx, err := glfw.CreateWindow(1600, 900, "Cubemap Test", nil, nil)
 	check(err)
 	ctx.MakeContextCurrent()
 
-	gl.Init()
+	log.Println("Initializing OpenGL")
+
 	err = gl.InitWithProcAddrFunc(func(name string) unsafe.Pointer {
 		addr := glfw.GetProcAddress(name)
 		if addr == nil {
@@ -71,69 +68,128 @@ func main() {
 	GlEnv = GetGlEnv()
 	Input = NewInputManager(ctx)
 
-	batch := NewRenderBatch()
+	GlState.Enable(gl.DEBUG_OUTPUT)
+	GlState.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
 
-	pack := &DirPack{}
-	pack.AddIndexFile("assets/index.json")
-	pavementModel, err := pack.LoadModel("white_paint_floor")
-	check(err)
+	gl.DebugMessageCallback(func(source, gltype, id, severity uint32, length int32, message string, userParam unsafe.Pointer) {
+		if gltype == gl.DEBUG_TYPE_PUSH_GROUP || gltype == gl.DEBUG_TYPE_POP_GROUP {
+			// glDebugMessageControl is ignored in nsight, so double check to prevent log spam
+			return
+		}
+		log.Printf("GL: %v\n", message)
+	}, nil)
 
-	batch.Upload(pavementModel.Mesh)
-	batch.AddMaterial(pavementModel.Material)
-	batch.Add(pavementModel.Mesh.Name, pavementModel.Material.Name, InstanceAttributes{
-		ModelMatrix: mgl32.Ident4(),
+	gl.DebugMessageControl(gl.DONT_CARE, gl.DEBUG_TYPE_PUSH_GROUP, gl.DONT_CARE, 0, nil, false)
+	gl.DebugMessageControl(gl.DONT_CARE, gl.DEBUG_TYPE_POP_GROUP, gl.DONT_CARE, 0, nil, false)
+
+	var (
+		pack  *DirPack
+		batch *RenderBatch
+	)
+
+	lm := &SimpleLoadManager{}
+
+	lm.OnLoad(func(ctx *glfw.Window) {
+		pack = &DirPack{}
+		pack.AddIndexFile("assets/index.json")
+		pavementModel, err := pack.LoadModel("square_floor")
+		check(err)
+
+		batch = NewRenderBatch()
+		batch.Upload(pavementModel.Mesh)
+		batch.AddMaterial(pavementModel.Material)
+
+		for x := -2; x <= 2; x++ {
+			for z := -2; z <= 2; z++ {
+				batch.Add(pavementModel.Mesh.Name, pavementModel.Material.Name, InstanceAttributes{
+					ModelMatrix: mgl32.Translate3D(float32(x*2), 0, float32(z*2)),
+				})
+			}
+		}
 	})
-
-	imguiShader, err := pack.LoadShaderPipeline("imgui")
-	check(err)
-	gui := NewImGui(imguiShader)
-
-	pbrShader, err := pack.LoadShaderPipeline("pbr")
-	check(err)
 
 	viewportDims := [4]int32{}
 	gl.GetIntegerv(gl.VIEWPORT, &viewportDims[0])
 	viewportWidth := int(viewportDims[2])
 	viewportHeight := int(viewportDims[3])
 
+	msFbo := NewFramebuffer()
+	msColorAttachment := NewTexture(gl.TEXTURE_2D_MULTISAMPLE)
+	msColorAttachment.AllocateMS(gl.RGBA8, viewportWidth, viewportHeight, 0, 2, true)
+	msFbo.AttachTexture(0, msColorAttachment)
+	msFbo.BindTargets(0)
+	msDepthAttachment := NewRenderbuffer()
+	msDepthAttachment.AllocateMS(gl.DEPTH24_STENCIL8, viewportWidth, viewportHeight, 2)
+	msFbo.AttachRenderbuffer(gl.DEPTH_ATTACHMENT, msDepthAttachment)
+	check(msFbo.Check(gl.DRAW_FRAMEBUFFER))
+
+	var (
+		pbrShader UnboundShaderPipeline
+		dd        *DirectBuffer
+		gui       *ImGui
+	)
+
+	lm.OnLoad(func(ctx *glfw.Window) {
+		pbrShader, err = pack.LoadShaderPipeline("pbr")
+		check(err)
+
+		directShader, err := pack.LoadShaderPipeline("direct")
+		check(err)
+		dd = NewDirectDrawBuffer(directShader)
+
+		imguiShader, err := pack.LoadShaderPipeline("imgui")
+		check(err)
+		gui = NewImGui(imguiShader)
+	})
+
 	cam := &Camera{
-		Position:          mgl32.Vec3{0, 1, 2},
-		Orientation:       mgl32.Vec3{30, 0, 0},
+		Position:          mgl32.Vec3{0.0, 1.0, 0.0},
+		Orientation:       mgl32.Vec3{90.0, 0.0, 0.0},
 		VerticalFov:       70,
 		ViewportDimension: mgl32.Vec2{float32(viewportWidth), float32(viewportHeight)},
 		ClippingPlanes:    mgl32.Vec2{0.1, 1000},
 	}
 	cam.UpdateProjectionMatrix()
 
-	textureSampler := NewSampler()
-	textureSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
-	textureSampler.WrapMode(gl.REPEAT, gl.REPEAT, 0)
+	texAlbedoSampler := NewSampler()
+	texAlbedoSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
+	texAlbedoSampler.WrapMode(gl.REPEAT, gl.REPEAT, 0)
+	texAlbedoSampler.AnisotropicFilter(8.0)
+
+	texNormalSampler := NewSampler()
+	texNormalSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
+	texNormalSampler.WrapMode(gl.REPEAT, gl.REPEAT, 0)
+	texNormalSampler.AnisotropicFilter(8.0)
+
+	texOrmSampler := NewSampler()
+	texOrmSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
+	texOrmSampler.WrapMode(gl.REPEAT, gl.REPEAT, 0)
 
 	lightPositions := []mgl32.Vec3{
-		{-0.9, 0.5, -0.9},
-		{0.9, 0.5, -0.9},
-		{-0.9, 0.5, 0.9},
-		{0.9, 0.5, 0.9},
+		{-4.5, 1.0, -4.5},
+		{4.5, 1.0, -4.5},
+		{-4.5, 1.0, 4.5},
+		{4.5, 1.0, 4.5},
 	}
 
 	lightColors := []mgl32.Vec3{
-		{3.75, 7.0, 1.75},
-		{7.0, 2.9, 3.0},
-		{7.0, 4.35, 2.05},
-		{4.25, 1.75, 7.0},
+		mgl32.Vec3{3.75, 7.0, 1.75}.Mul(10),
+		mgl32.Vec3{7.0, 2.9, 3.0}.Mul(10),
+		mgl32.Vec3{7.0, 4.35, 2.05}.Mul(10),
+		mgl32.Vec3{4.25, 1.75, 7.0}.Mul(10),
 	}
 
+	lm.Reload(ctx)
+
 	wireframe := false
-
-	directShader, err := pack.LoadShaderPipeline("direct")
-	check(err)
-	dd := NewDirectDrawBuffer(directShader)
-
-	// FIXME: Normal maps don't seem to reflect light from the correct direction
+	lodBias := make([]float32, 3)
+	reload := false
 
 	for !ctx.ShouldClose() {
 		glfw.PollEvents()
 		Input.Update(ctx)
+
+		msFbo.Bind(gl.DRAW_FRAMEBUFFER)
 
 		movement := Input.GetMovement(glfw.KeyW, glfw.KeyS, glfw.KeyA, glfw.KeyD, glfw.KeySpace, glfw.KeyLeftControl)
 		if movement.LenSqr() != 0 {
@@ -168,12 +224,12 @@ func main() {
 			pbrShader.Get(gl.FRAGMENT_SHADER).SetUniformIndexed("u_light_colors", i, lightColors[i])
 		}
 
+		texAlbedoSampler.Bind(0)
+		texNormalSampler.Bind(1)
+		texOrmSampler.Bind(2)
 		for _, mat := range batch.Materials {
-			textureSampler.Bind(0)
 			mat.Material.Albedo.Bind(0)
-			textureSampler.Bind(1)
 			mat.Material.Normal.Bind(1)
-			textureSampler.Bind(2)
 			mat.Material.ORM.Bind(2)
 
 			gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT, gl.PtrOffset(mat.ElementOffset), int32(mat.ElementCount), 0)
@@ -182,8 +238,25 @@ func main() {
 		im.NewFrame()
 		im.Begin("main_window")
 
+		if im.Button("Reload Assets") {
+			reload = true
+		}
+
 		if im.Checkbox("Wireframe", &wireframe) {
 			GlState.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
+		}
+
+		im.Text("LOD Bias")
+		if im.SliderFloat("Albedo", &lodBias[0], -10, 10) {
+			texAlbedoSampler.LodBias(lodBias[0])
+		}
+
+		if im.SliderFloat("Normal", &lodBias[1], -10, 10) {
+			texNormalSampler.LodBias(lodBias[1])
+		}
+
+		if im.SliderFloat("ORM", &lodBias[2], -10, 10) {
+			texOrmSampler.LodBias(lodBias[2])
 		}
 
 		im.PushID("camera")
@@ -222,7 +295,15 @@ func main() {
 
 		gui.Draw()
 
+		GlState.SetEnabled()
+
+		gl.BlitNamedFramebuffer(msFbo.Id(), 0, 0, 0, int32(viewportWidth), int32(viewportHeight), 0, 0, int32(viewportWidth), int32(viewportHeight), gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT, gl.NEAREST)
 		ctx.SwapBuffers()
+
+		if reload {
+			reload = false
+			lm.Reload(ctx)
+		}
 	}
 }
 

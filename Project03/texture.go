@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/draw"
 	_ "image/jpeg"
@@ -25,6 +26,7 @@ type UnboundTexture interface {
 	Id() uint32
 	Bind(unit int) BoundTexture
 	Allocate(levels int, internalFormat uint32, width, height, depth int)
+	AllocateMS(internalFormat uint32, width, height, depth, samples int, fixedSampleLocations bool)
 	Load(level int, width, height, depth int, format uint32, data any)
 	MipmapLevels(base, max int)
 	DepthStencilTextureMode(mode int32)
@@ -52,12 +54,13 @@ func (tex *texture) Dimensions() int {
 	switch tex.dimensions {
 	case gl.TEXTURE_1D, gl.TEXTURE_BUFFER:
 		return 1
-	case gl.TEXTURE_3D, gl.TEXTURE_2D_ARRAY, gl.TEXTURE_CUBE_MAP:
+	case gl.TEXTURE_3D, gl.TEXTURE_2D_ARRAY, gl.TEXTURE_2D_MULTISAMPLE_ARRAY, gl.TEXTURE_CUBE_MAP:
 		return 3
-	case gl.TEXTURE_2D, gl.TEXTURE_1D_ARRAY, gl.TEXTURE_CUBE_MAP_NEGATIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,
+	case gl.TEXTURE_2D, gl.TEXTURE_2D_MULTISAMPLE, gl.TEXTURE_1D_ARRAY, gl.TEXTURE_CUBE_MAP_NEGATIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,
 		gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_POSITIVE_Z:
 		return 2
 	default:
+		gl.DebugMessageInsert(gl.DEBUG_SOURCE_APPLICATION, gl.DEBUG_TYPE_ERROR, 1, gl.DEBUG_SEVERITY_MEDIUM, -1, gl.Str(fmt.Sprintf("invalid texture dimension for texture %d: %04x\x00", tex.glId, tex.dimensions)))
 		return 0
 	}
 }
@@ -102,6 +105,20 @@ func (tex *texture) Allocate(levels int, internalFormat uint32, width, height, d
 		gl.TextureStorage2D(tex.glId, int32(levels), internalFormat, int32(width), int32(height))
 	case 3:
 		gl.TextureStorage3D(tex.glId, int32(levels), internalFormat, int32(width), int32(height), int32(depth))
+	}
+}
+
+func (tex *texture) AllocateMS(internalFormat uint32, width, height, depth, samples int, fixedSampleLocations bool) {
+	tex.width = int32(width)
+	tex.height = int32(height)
+	tex.depth = int32(depth)
+	switch tex.Dimensions() {
+	case 1:
+		panic("1D texture cannot be allocated for multisampling")
+	case 2:
+		gl.TextureStorage2DMultisample(tex.glId, int32(samples), internalFormat, int32(width), int32(height), fixedSampleLocations)
+	case 3:
+		gl.TextureStorage3DMultisample(tex.glId, int32(samples), internalFormat, int32(width), int32(height), int32(depth), fixedSampleLocations)
 	}
 }
 
@@ -164,6 +181,8 @@ type UnboundSampler interface {
 	WrapMode(s, t, r int32)
 	CompareMode(mode, fn int32)
 	BorderColor(color mgl32.Vec4)
+	AnisotropicFilter(quality float32)
+	LodBias(bias float32)
 }
 
 type BoundSampler interface {
@@ -192,7 +211,7 @@ func (s *sampler) FilterMode(min, mag int32) {
 		gl.SamplerParameteri(s.glId, gl.TEXTURE_MIN_FILTER, min)
 	}
 	if mag != 0 {
-		gl.SamplerParameteri(s.glId, gl.TEXTURE_MIN_FILTER, mag)
+		gl.SamplerParameteri(s.glId, gl.TEXTURE_MAG_FILTER, mag)
 	}
 }
 
@@ -217,6 +236,14 @@ func (sampler *sampler) CompareMode(mode, fn int32) {
 
 func (sampler *sampler) BorderColor(color mgl32.Vec4) {
 	gl.SamplerParameterfv(sampler.glId, gl.TEXTURE_BORDER_COLOR, &color[0])
+}
+
+func (sampler *sampler) AnisotropicFilter(quality float32) {
+	gl.SamplerParameterf(sampler.glId, gl.TEXTURE_MAX_ANISOTROPY, quality)
+}
+
+func (sampler *sampler) LodBias(bias float32) {
+	gl.SamplerParameterf(sampler.glId, gl.TEXTURE_LOD_BIAS, bias)
 }
 
 func DecodeImage(r io.Reader) (*image.RGBA, error) {

@@ -1,5 +1,8 @@
 This is my first deferred rendering project.
 
+![Screenshot](images/Screenshot_2023-08-16_212255.jpg)
+
+
 ## Running the Demo
 
 System Requirements:

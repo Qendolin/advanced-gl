@@ -85,10 +85,10 @@ var Res_DirectFshSrc string
 //go:embed assets/shaders/sky.frag
 var Res_SkyFshSrc string
 
-//go:embed assets/models/scene.geo
+//go:embed assets/models/sponza.geo.lz4
 var Res_SceneGeometry []byte
 
-//go:embed assets/models/scene.scn
+//go:embed assets/models/sponza.scn.lz4
 var Res_Scene []byte
 
 //go:embed assets/textures/uv.png

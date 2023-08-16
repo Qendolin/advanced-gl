@@ -192,7 +192,7 @@ func (s *sampler) FilterMode(min, mag int32) {
 		gl.SamplerParameteri(s.glId, gl.TEXTURE_MIN_FILTER, min)
 	}
 	if mag != 0 {
-		gl.SamplerParameteri(s.glId, gl.TEXTURE_MIN_FILTER, mag)
+		gl.SamplerParameteri(s.glId, gl.TEXTURE_MAG_FILTER, mag)
 	}
 }
 

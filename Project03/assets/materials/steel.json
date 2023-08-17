@@ -1,0 +1,10 @@
+{
+	"name": "steel",
+	"albedo": "steel_albedo.png",
+	"normal": "steel_normal.png",
+	"emission": "steel_emission.png",
+	"orm": "steel_orm.png"
+}
+
+
+

@@ -2,11 +2,6 @@ package main
 
 import (
 	"fmt"
-	"image"
-	"image/draw"
-	_ "image/jpeg"
-	_ "image/png"
-	"io"
 	"log"
 	"math"
 
@@ -32,6 +27,7 @@ type UnboundTexture interface {
 	DepthStencilTextureMode(mode int32)
 	CreateView(dimensions, internalFormat uint32, minLevel, maxLevel, minLayer, maxLayer int) UnboundTexture
 	GenerateMipmap()
+	Delete()
 }
 
 type BoundTexture interface {
@@ -72,6 +68,10 @@ func (tex *texture) Id() uint32 {
 func (tex *texture) Bind(unit int) BoundTexture {
 	GlState.BindTextureUnit(unit, tex.glId)
 	return BoundTexture(tex)
+}
+
+func (tex *texture) Delete() {
+	gl.DeleteTextures(1, &tex.glId)
 }
 
 func (tex *texture) CreateView(dimensions, internalFormat uint32, minLevel, maxLevel, minLayer, maxLayer int) UnboundTexture {
@@ -244,29 +244,4 @@ func (sampler *sampler) AnisotropicFilter(quality float32) {
 
 func (sampler *sampler) LodBias(bias float32) {
 	gl.SamplerParameterf(sampler.glId, gl.TEXTURE_LOD_BIAS, bias)
-}
-
-func DecodeImage(r io.Reader) (*image.RGBA, error) {
-	img, _, err := image.Decode(r)
-	if err != nil {
-		return nil, err
-	}
-	rgba := image.NewRGBA(img.Bounds())
-	draw.Draw(rgba, img.Bounds(), img, image.Point{}, draw.Src)
-	FlipImageVertical(rgba)
-	return rgba, nil
-}
-
-func FlipImageVertical(img *image.RGBA) {
-	upperHalf := make([]byte, img.Stride*(img.Rect.Dy()/2))
-	copy(upperHalf, img.Pix)
-	end := len(img.Pix)
-	for y := 0; y < img.Rect.Dy()/2; y++ {
-		top := img.Pix[y*img.Stride : (y+1)*img.Stride]
-		bottom := img.Pix[end-(y+1)*img.Stride : end-y*img.Stride]
-		copy(top, bottom)
-
-		top = upperHalf[y*img.Stride : (y+1)*img.Stride]
-		copy(bottom, top)
-	}
 }

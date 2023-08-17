@@ -1,0 +1,10 @@
+{
+	"name": "dirty_mirror",
+	"albedo": "dirty_mirror_albedo.png",
+	"normal": "dirty_mirror_normal.png",
+	"emission": "dirty_mirror_emission.png",
+	"orm": "dirty_mirror_orm.png"
+}
+
+
+

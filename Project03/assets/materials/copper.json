@@ -1,0 +1,10 @@
+{
+	"name": "copper",
+	"albedo": "copper_albedo.png",
+	"normal": "copper_normal.png",
+	"emission": "copper_emission.png",
+	"orm": "copper_orm.png"
+}
+
+
+

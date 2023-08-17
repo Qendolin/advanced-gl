@@ -1,6 +1,7 @@
 package main
 
 import (
+	"deferred-gl/Project03/stbi"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -251,6 +252,15 @@ type Material struct {
 	ORM    UnboundTexture
 }
 
+func (mat *Material) Delete() {
+	mat.Albedo.Delete()
+	mat.Albedo = nil
+	mat.Normal.Delete()
+	mat.Normal = nil
+	mat.ORM.Delete()
+	mat.ORM = nil
+}
+
 func (pack *DirPack) LoadMaterial(name string) (*Material, error) {
 	filename, ok := pack.MaterialIndex[name]
 	if !ok {
@@ -317,8 +327,8 @@ func (pack *DirPack) LoadTextureImage(filename string) (*image.RGBA, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not open texture image file %q: %w", filename, err)
 	}
-
-	return DecodeImage(file)
+	stbi.Default.FlipVertically = true
+	return stbi.Load(file)
 }
 
 func (pack *DirPack) LoadMesh(name string) (*Mesh, error) {

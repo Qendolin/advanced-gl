@@ -75,6 +75,12 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+vec3 reinhard2(vec3 x) {
+  const float L_white = 4.0;
+
+  return (x * (1.0 + x / (L_white * L_white))) / (1.0 + x);
+}
+
 void main()
 {
     vec3 albedo     = pow(texture(u_albedo, in_uv).rgb, vec3(2.2));
@@ -142,7 +148,7 @@ void main()
     vec3 color = ambient + Lo;
 
     // HDR tonemapping
-    color = color / (color + vec3(1.0));
+    color = reinhard2(color);
     // gamma correct
     color = pow(color, vec3(1.0/2.2));
 

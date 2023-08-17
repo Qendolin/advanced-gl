@@ -13,6 +13,8 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 	im "github.com/inkyblackness/imgui-go/v4"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
 
 var Arguments struct {
@@ -92,7 +94,7 @@ func main() {
 	lm.OnLoad(func(ctx *glfw.Window) {
 		pack = &DirPack{}
 		pack.AddIndexFile("assets/index.json")
-		pavementModel, err := pack.LoadModel("square_floor")
+		pavementModel, err := pack.LoadModel("white_paint_floor")
 		check(err)
 
 		batch = NewRenderBatch()
@@ -164,6 +166,7 @@ func main() {
 	texOrmSampler := NewSampler()
 	texOrmSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
 	texOrmSampler.WrapMode(gl.REPEAT, gl.REPEAT, 0)
+	texOrmSampler.LodBias(-3.0)
 
 	lightPositions := []mgl32.Vec3{
 		{-4.5, 1.0, -4.5},
@@ -182,8 +185,9 @@ func main() {
 	lm.Reload(ctx)
 
 	wireframe := false
-	lodBias := make([]float32, 3)
+	lodBias := []float32{0.0, 0.0, -3.0}
 	reload := false
+	selectedMaterial := ""
 
 	for !ctx.ShouldClose() {
 		glfw.PollEvents()
@@ -284,6 +288,22 @@ func main() {
 			}
 		}
 		im.PopID()
+
+		if im.BeginCombo("Material", selectedMaterial) {
+			materials := maps.Keys(pack.MaterialIndex)
+			slices.Sort(materials)
+			for _, name := range materials {
+				if im.Selectable(name) {
+					mat, err := pack.LoadMaterial(name)
+					check(err)
+					batch.Materials[0].Material.Delete()
+					batch.Materials[0].Material = mat
+					selectedMaterial = name
+				}
+			}
+
+			im.EndCombo()
+		}
 
 		im.End()
 

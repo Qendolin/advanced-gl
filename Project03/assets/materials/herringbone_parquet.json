@@ -1,0 +1,7 @@
+{
+	"name": "herringbone_parquet",
+	"albedo": "herringbone_parquet_albedo.png",
+	"normal": "herringbone_parquet_normal.png",
+	"emission": "herringbone_parquet_emission.png",
+	"orm": "herringbone_parquet_orm.png"
+}

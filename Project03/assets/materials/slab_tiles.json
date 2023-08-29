@@ -1,0 +1,7 @@
+{
+	"name": "slab_tiles",
+	"albedo": "slab_tiles_albedo.png",
+	"normal": "slab_tiles_normal.png",
+	"emission": "slab_tiles_emission.png",
+	"orm": "slab_tiles_orm.png"
+}

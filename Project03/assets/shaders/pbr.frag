@@ -12,6 +12,7 @@ layout(location = 0) out vec4 out_color;
 layout(binding = 0) uniform sampler2D u_albedo;
 layout(binding = 1) uniform sampler2D u_normal;
 layout(binding = 2) uniform sampler2D u_orm;
+layout(binding = 3) uniform samplerCube u_irradiance;
 uniform vec3 u_camera_position;
 uniform vec3[4] u_light_positions;
 uniform vec3[4] u_light_colors;
@@ -62,7 +63,7 @@ float GeometrySchlickGGX(float NdotV, float roughness)
 float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 {
     // + 5e-6 to prevent artifacts, value is from https://google.github.io/filament/Filament.html#materialsystem/specularbrdf:~:text=float%20NoV%20%3D%20abs(dot(n%2C%20v))%20%2B%201e%2D5%3B
-    float NdotV = max(dot(N, V), 0.0) + 5e-6;
+    float NdotV = max(dot(N, V), 0.0) * (1.0 - 5e-6) + 5e-6;
     float NdotL = max(dot(N, L), 0.0);
     float ggx2 = GeometrySchlickGGX(NdotV, roughness);
     float ggx1 = GeometrySchlickGGX(NdotL, roughness);
@@ -73,6 +74,20 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
+{
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 sampleAmbient(vec3 N, vec3 V, vec3 F0, float roughness, vec3 albedo, float ao)
+{
+    vec3 kS = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+    vec3 kD = 1.0 - kS;
+    vec3 irradiance = texture(u_irradiance, N).rgb;
+    vec3 diffuse    = irradiance * albedo;
+    return (kD * diffuse) * ao;
 }
 
 vec3 reinhard2(vec3 x) {
@@ -143,7 +158,7 @@ void main()
 
     // ambient lighting (note that the next IBL tutorial will replace
     // this ambient lighting with environment lighting).
-    vec3 ambient = vec3(0.04) * albedo * ao;
+    vec3 ambient = sampleAmbient(N, V, F0, roughness, albedo, ao);
 
     vec3 color = ambient + Lo;
 

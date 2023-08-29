@@ -1,0 +1,9 @@
+{
+	"files.associations": {
+		"*.vsh": "glsl",
+		"*.fsh": "glsl",
+		"x86intrin.h": "c",
+		"type_traits": "c",
+		"float_ops.h": "c"
+	}
+}

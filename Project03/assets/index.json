@@ -2,5 +2,6 @@
 	"materials": ["./materials/*.json"],
 	"models": ["./models/*.json"],
 	"meshes": ["./meshes/*.geo"],
-	"shaders": ["./shaders/*.json"]
+	"shaders": ["./shaders/*.json"],
+	"hdris": ["./hdris/*.iblenv.lz4", "./hdris/*.iblenv"]
 }

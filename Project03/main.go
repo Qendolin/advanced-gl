@@ -15,6 +15,10 @@ import (
 	im "github.com/inkyblackness/imgui-go/v4"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
+
+	"advanced-gl/Project03/ibl"
+	. "advanced-gl/Project03/libgl"
+	. "advanced-gl/Project03/libscn"
 )
 
 var Arguments struct {
@@ -70,6 +74,7 @@ func main() {
 	GlEnv = GetGlEnv()
 	Input = NewInputManager(ctx)
 
+	GlState.Enable(gl.TEXTURE_CUBE_MAP_SEAMLESS)
 	GlState.Enable(gl.DEBUG_OUTPUT)
 	GlState.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
 
@@ -126,9 +131,12 @@ func main() {
 	check(msFbo.Check(gl.DRAW_FRAMEBUFFER))
 
 	var (
-		pbrShader UnboundShaderPipeline
-		dd        *DirectBuffer
-		gui       *ImGui
+		pbrShader  UnboundShaderPipeline
+		skyShader  UnboundShaderPipeline
+		dd         *DirectBuffer
+		gui        *ImGui
+		envCubemap UnboundTexture
+		iblCubemap UnboundTexture
 	)
 
 	lm.OnLoad(func(ctx *glfw.Window) {
@@ -142,6 +150,34 @@ func main() {
 		imguiShader, err := pack.LoadShaderPipeline("imgui")
 		check(err)
 		gui = NewImGui(imguiShader)
+
+		skyShader, err = pack.LoadShaderPipeline("sky")
+		check(err)
+	})
+
+	skyBoxVbo := NewBuffer()
+	skyBoxVbo.Allocate(ibl.NewUnitCube(), 0)
+	skyBox := NewVertexArray()
+	skyBox.Layout(0, 0, 3, gl.FLOAT, false, 0)
+	skyBox.BindBuffer(0, skyBoxVbo, 0, 3*4)
+
+	cubemapSampler := NewSampler()
+	cubemapSampler.WrapMode(gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE)
+	cubemapSampler.FilterMode(gl.LINEAR, gl.LINEAR)
+
+	lm.OnLoad(func(ctx *glfw.Window) {
+		hdri, err := pack.LoadHdri("studio_small_02_4k")
+		check(err)
+		hdriIrradiance, err := pack.LoadHdri("studio_small_02_4k_irradiance")
+		check(err)
+
+		envCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
+		envCubemap.Allocate(1, gl.RGB16F, hdri.Size, hdri.Size, 0)
+		envCubemap.Load(0, hdri.Size, hdri.Size, 6, gl.RGB, hdri.Concat())
+
+		iblCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
+		iblCubemap.Allocate(1, gl.RGB16F, hdriIrradiance.Size, hdriIrradiance.Size, 0)
+		iblCubemap.Load(0, hdriIrradiance.Size, hdriIrradiance.Size, 6, gl.RGB, hdriIrradiance.Concat())
 	})
 
 	cam := &Camera{
@@ -187,7 +223,10 @@ func main() {
 	wireframe := false
 	lodBias := []float32{0.0, 0.0, -3.0}
 	reload := false
-	selectedMaterial := ""
+	var (
+		selectedMaterial string
+		selectedHdri     string
+	)
 
 	for !ctx.ShouldClose() {
 		glfw.PollEvents()
@@ -231,6 +270,9 @@ func main() {
 		texAlbedoSampler.Bind(0)
 		texNormalSampler.Bind(1)
 		texOrmSampler.Bind(2)
+		cubemapSampler.Bind(3)
+
+		iblCubemap.Bind(3)
 		for _, mat := range batch.Materials {
 			mat.Material.Albedo.Bind(0)
 			mat.Material.Normal.Bind(1)
@@ -238,6 +280,15 @@ func main() {
 
 			gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT, gl.PtrOffset(mat.ElementOffset), int32(mat.ElementCount), 0)
 		}
+
+		skyShader.Bind()
+		skyShader.Get(gl.VERTEX_SHADER).SetUniform("u_view_mat", cam.ViewMatrix)
+		skyShader.Get(gl.VERTEX_SHADER).SetUniform("u_projection_mat", cam.ProjectionMatrix)
+		envCubemap.Bind(0)
+		cubemapSampler.Bind(0)
+		skyBox.Bind()
+		GlState.DepthFunc(gl.LEQUAL)
+		gl.DrawArrays(gl.TRIANGLES, 0, 6*6)
 
 		im.NewFrame()
 		im.Begin("main_window")
@@ -299,6 +350,23 @@ func main() {
 					batch.Materials[0].Material.Delete()
 					batch.Materials[0].Material = mat
 					selectedMaterial = name
+				}
+			}
+
+			im.EndCombo()
+		}
+
+		if im.BeginCombo("Environment", selectedHdri) {
+			hdris := maps.Keys(pack.HdriIndex)
+			slices.Sort(hdris)
+			for _, name := range hdris {
+				if im.Selectable(name) {
+					hdri, err := pack.LoadHdri(name)
+					check(err)
+					envCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
+					envCubemap.Allocate(1, gl.RGB16F, hdri.Size, hdri.Size, 0)
+					envCubemap.Load(0, hdri.Size, hdri.Size, 6, gl.RGB, hdri.Concat())
+					selectedHdri = name
 				}
 			}
 

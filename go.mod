@@ -1,6 +1,6 @@
-module deferred-gl
+module advanced-gl
 
-go 1.18
+go 1.20
 
 require (
 	github.com/go-gl/gl v0.0.0-20211210172815-726fda9656d6
@@ -9,13 +9,14 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.0.5
-	github.com/icza/bitio v1.1.0
 	github.com/inkyblackness/imgui-go/v4 v4.5.0
 	github.com/pierrec/lz4/v4 v4.1.18
 )
 
-require (
-	golang.org/x/exp v0.0.0-20230801115018-d63ba01acd4b
-	golang.org/x/image v0.0.0-20190321063152-3fc05d484e9f // indirect
-)
+require github.com/chewxy/math32 v1.10.1
+
+require github.com/Qendolin/go-opencl v0.0.0-20230823133503-e8ab840ad9f5
+
+require golang.org/x/image v0.0.0-20190321063152-3fc05d484e9f // indirect
+
+require golang.org/x/exp v0.0.0-20230801115018-d63ba01acd4b

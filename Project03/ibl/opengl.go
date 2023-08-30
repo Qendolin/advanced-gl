@@ -147,7 +147,7 @@ func (conv *glConverter) Convert(image *stbi.RgbaHdr, size int) (*IblEnv, error)
 		gl.GetTextureImage(cubemap.Id(), 0, gl.RGB, gl.FLOAT, int32(len(result)*4), libutil.Pointer(result))
 	}
 
-	return NewIblEnv(result, size), nil
+	return NewIblEnv(result, size, 1), nil
 }
 
 func (conv *glConverter) Release() {

@@ -14,6 +14,8 @@ const (
 	Deg2Rad = float32(math.Pi / 180)
 )
 
+const InvalidAddress uintptr = 0xffff_ffff_ffff_ffff
+
 type Deleter interface {
 	Delete()
 }

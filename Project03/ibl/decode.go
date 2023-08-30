@@ -41,7 +41,7 @@ func DecodeIblEnv(r io.Reader) (env *IblEnv, err error) {
 		return nil, fmt.Errorf("environment header is corrupt; byte 0x%08x", br.LastIndex)
 	}
 
-	if header.Version != IblEnvVersion1_001_000 {
+	if header.Version != IblEnvVersion1_002_000 {
 		return nil, fmt.Errorf("environment version %d unsupported; byte 0x%08x", header.Version, br.LastIndex)
 	}
 
@@ -52,7 +52,7 @@ func DecodeIblEnv(r io.Reader) (env *IblEnv, err error) {
 		return nil, fmt.Errorf("environment compression id %d unsupported; byte 0x%08x", header.Compression, br.LastIndex)
 	}
 
-	pixels := 6 * header.Size * header.Size
+	pixels := calcCubeMapPixels(int(header.Size), int(header.Levels))
 	data := make([]byte, pixels*4)
 	_, err = io.ReadFull(pixr, data)
 	if err != nil {
@@ -64,7 +64,7 @@ func DecodeIblEnv(r io.Reader) (env *IblEnv, err error) {
 		return nil, fmt.Errorf("decoding error: %w", err)
 	}
 
-	return NewIblEnv(colors, int(header.Size)), nil
+	return NewIblEnv(colors, int(header.Size), int(header.Levels)), nil
 }
 
 func DecodeRgbe(r io.Reader, hasAlpha bool) ([]float32, error) {

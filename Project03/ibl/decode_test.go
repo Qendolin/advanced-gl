@@ -15,7 +15,7 @@ import (
 )
 
 func TestDecodeIblEnv(t *testing.T) {
-	ibl, err := ibl.DecodeIblEnv(bytes.NewBuffer(testdata.iblLevelFast))
+	hdri, err := ibl.DecodeIblEnv(bytes.NewBuffer(testdata.iblLevelFast))
 	if err != nil {
 		t.Error(err)
 		return
@@ -24,7 +24,7 @@ func TestDecodeIblEnv(t *testing.T) {
 	expected := []float32{0.2168, 0.1641, 0.1250, 0.2168, 0.1895, 0.1680}
 
 	for i := 0; i < 6; i++ {
-		is := ibl.Faces[i][len(ibl.Faces[i])-1]
+		is := hdri.Face(0, i)[len(hdri.Face(0, i))-1]
 		should := expected[i]
 		if math.Abs(float64(is-should)) > 0.001 {
 			t.Errorf("conversion result incorrect for face %d, should be: %.4f but is %.4f\n", i, should, is)

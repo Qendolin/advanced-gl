@@ -185,7 +185,7 @@ func (conv *clConverter) Convert(hdri *stbi.RgbaHdr, size int) (*IblEnv, error) 
 	}
 	result = result[: size*size*6*3 : size*size*6*3]
 
-	iblEnv := NewIblEnv(result, size)
+	iblEnv := NewIblEnv(result, size, 1)
 
 	return iblEnv, nil
 }
@@ -207,7 +207,7 @@ func NewClConvolver(preferredDevice DeviceType, quality int) (conv Convolver, er
 		return nil, err
 	}
 
-	samples := generateConvolutionSamples(quality)
+	samples := generateDiffuseConvolutionSamples(quality)
 	sampleBuf, err := core.context.CreateBuffer(cl.MemReadOnly|cl.MemCopyHostPtr, len(samples)*int(unsafe.Sizeof(samples[0])), unsafe.Pointer(&samples[0]))
 	if err != nil {
 		return nil, err
@@ -233,9 +233,9 @@ func NewClConvolver(preferredDevice DeviceType, quality int) (conv Convolver, er
 func (conv *clConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error) {
 	bpp := 4 * 4
 
-	rgbaData := make([]float32, env.Size*env.Size*6*4)
-	rgbData := env.Concat()
-	for i := 0; i < env.Size*env.Size*6; i++ {
+	rgbaData := make([]float32, env.BaseSize*env.BaseSize*6*4)
+	rgbData := env.All()
+	for i := 0; i < env.BaseSize*env.BaseSize*6; i++ {
 		rgbaData[i*4+0] = rgbData[i*3+0]
 		rgbaData[i*4+1] = rgbData[i*3+1]
 		rgbaData[i*4+2] = rgbData[i*3+2]
@@ -247,10 +247,10 @@ func (conv *clConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error) {
 		ChannelDataType: cl.ChannelDataTypeFloat,
 	}, cl.ImageDescription{
 		Type:      cl.MemObjectTypeImage2DArray,
-		Width:     env.Size,
-		Height:    env.Size,
+		Width:     env.BaseSize,
+		Height:    env.BaseSize,
 		ArraySize: 6,
-	}, env.Size*env.Size*6*bpp, unsafe.Pointer(&rgbaData[0]))
+	}, env.BaseSize*env.BaseSize*6*bpp, unsafe.Pointer(&rgbaData[0]))
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +309,7 @@ func (conv *clConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error) {
 	}
 	result = result[: size*size*6*3 : size*size*6*3]
 
-	iblEnv := NewIblEnv(result, size)
+	iblEnv := NewIblEnv(result, size, 1)
 
 	return iblEnv, nil
 }

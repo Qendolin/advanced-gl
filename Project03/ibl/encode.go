@@ -78,15 +78,16 @@ func EncodeIblEnv(w io.Writer, env *IblEnv, options ...EncodeOption) (err error)
 
 	header := IblEnvHeader{
 		Check:       MagicNumberIBLENV,
-		Version:     IblEnvVersion1_001_000,
+		Version:     IblEnvVersion1_002_000,
 		Compression: ctx.Compression,
-		Size:        uint32(env.Size),
+		Size:        uint32(env.BaseSize),
+		Levels:      uint32(env.Levels),
 	}
 	if !bw.WriteRef(&header) {
 		return fmt.Errorf("could not write ibl env header: %w", bw.Err)
 	}
 
-	if err := EncodeRgbe(ctx.Writer, env.Concat(), false); err != nil {
+	if err := EncodeRgbe(ctx.Writer, env.All(), false); err != nil {
 		return fmt.Errorf("could not write ibl env encoded pixels: %w", err)
 	}
 

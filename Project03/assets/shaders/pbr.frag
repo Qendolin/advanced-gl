@@ -12,7 +12,9 @@ layout(location = 0) out vec4 out_color;
 layout(binding = 0) uniform sampler2D u_albedo;
 layout(binding = 1) uniform sampler2D u_normal;
 layout(binding = 2) uniform sampler2D u_orm;
-layout(binding = 3) uniform samplerCube u_irradiance;
+layout(binding = 3) uniform samplerCube u_environment_diffuse;
+layout(binding = 4) uniform samplerCube u_environment_specualr;
+layout(binding = 5) uniform sampler2D u_environment_brdf_lut;
 uniform vec3 u_camera_position;
 uniform vec3[4] u_light_positions;
 uniform vec3[4] u_light_colors;
@@ -81,13 +83,21 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-vec3 sampleAmbient(vec3 N, vec3 V, vec3 F0, float roughness, vec3 albedo, float ao)
+
+vec3 sampleAmbient(vec3 N, vec3 V, vec3 R, vec3 F0, float roughness, vec3 albedo, float ao)
 {
-    vec3 kS = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+    vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+    vec3 kS = F;
     vec3 kD = 1.0 - kS;
-    vec3 irradiance = texture(u_irradiance, N).rgb;
+    vec3 irradiance = texture(u_environment_diffuse, N).rgb;
     vec3 diffuse    = irradiance * albedo;
-    return (kD * diffuse) * ao;
+
+    const float MAX_REFLECTION_LOD = 5.0;
+    vec3 reflection = textureLod(u_environment_specualr, R, roughness * MAX_REFLECTION_LOD).rgb;   
+    vec2 envBRDF  = texture(u_environment_brdf_lut, vec2(max(dot(N, V), 0.0), roughness)).rg;
+    vec3 specular = reflection * (F * envBRDF.x + envBRDF.y);
+
+    return (kD * diffuse + specular) * ao; 
 }
 
 vec3 reinhard2(vec3 x) {
@@ -109,6 +119,7 @@ void main()
     roughness = adjustRoughness(tN, roughness);
     vec3 N = transformNormal(tN);
     vec3 V = normalize(u_camera_position - in_world_position);
+    vec3 R = reflect(-V, N);
 
     // calculate reflectance at normal incidence; if dia-electric (like plastic) use F0
     // of 0.04 and if it's a metal, use the albedo color as F0 (metallic workflow)
@@ -158,7 +169,7 @@ void main()
 
     // ambient lighting (note that the next IBL tutorial will replace
     // this ambient lighting with environment lighting).
-    vec3 ambient = sampleAmbient(N, V, F0, roughness, albedo, ao);
+    vec3 ambient = sampleAmbient(N, V, R, F0, roughness, albedo, ao);
 
     vec3 color = ambient + Lo;
 

@@ -109,7 +109,7 @@ func TestMain(m *testing.M) {
 	testdata.iblLevelNone, err = io.ReadAll(lzr)
 	check(err)
 
-	testdata.iblEnv, err = ibl.DecodeIblEnv(bytes.NewBuffer(testdata.iblLevelNone))
+	testdata.iblEnv, err = ibl.DecodeOldIblEnv(bytes.NewBuffer(testdata.iblLevelNone))
 	check(err)
 
 	iblFile, err = os.Open("./testdata/cubemap_testing_full_fast_compressed.iblenv")
@@ -185,20 +185,24 @@ func saveResultIbl(name string, hdri *ibl.IblEnv) {
 	defer file.Close()
 	ibl.EncodeIblEnv(file, hdri, ibl.OptCompress(1))
 
-	file, err = os.OpenFile(fmt.Sprintf("testout/%s.png", name), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
-	if err != nil {
-		return
-	}
-	defer file.Close()
+	for i := 0; i < hdri.Levels; i++ {
+		file, err = os.OpenFile(fmt.Sprintf("testout/%s_%d.png", name, i), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+		if err != nil {
+			return
+		}
+		defer file.Close()
 
-	rgba := image.NewRGBA(image.Rect(0, 0, hdri.Size, hdri.Size*6))
-	hdr := hdri.Concat()
-	for i := 0; i < hdri.Size*hdri.Size*6; i++ {
-		rgba.Pix[i*4+0] = uint8(math32.Min(hdr[i*3+0], 1.0) * 0xff)
-		rgba.Pix[i*4+1] = uint8(math32.Min(hdr[i*3+1], 1.0) * 0xff)
-		rgba.Pix[i*4+2] = uint8(math32.Min(hdr[i*3+2], 1.0) * 0xff)
-		rgba.Pix[i*4+3] = 0xff
+		size := hdri.Size(i)
+		rgba := image.NewRGBA(image.Rect(0, 0, size, size*6))
+		hdr := hdri.Level(i)
+		for i := 0; i < size*size*6; i++ {
+			rgba.Pix[i*4+0] = uint8(math32.Min(hdr[i*3+0], 1.0) * 0xff)
+			rgba.Pix[i*4+1] = uint8(math32.Min(hdr[i*3+1], 1.0) * 0xff)
+			rgba.Pix[i*4+2] = uint8(math32.Min(hdr[i*3+2], 1.0) * 0xff)
+			rgba.Pix[i*4+3] = 0xff
+		}
+
+		png.Encode(file, rgba)
 	}
 
-	png.Encode(file, rgba)
 }

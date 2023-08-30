@@ -25,21 +25,21 @@ func TestConvertCl(t *testing.T) {
 		<-onMainDone
 	}()
 
-	var iblEnv *ibl.IblEnv
+	var hdri *ibl.IblEnv
 	onMain <- func() {
-		iblEnv, err = conv.Convert(testdata.hdr, testdata.hdr.Rect.Dx()/4)
+		hdri, err = conv.Convert(testdata.hdr, testdata.hdr.Rect.Dx()/4)
 	}
 	<-onMainDone
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	saveResultIbl(t.Name(), iblEnv)
+	saveResultIbl(t.Name(), hdri)
 
 	expected := []float32{0.22190419, 0.17548445, 0.12154484, 0.20652103, 0.20577157, 0.17545599}
 
 	for i := 0; i < 6; i++ {
-		is := iblEnv.Faces[i][len(iblEnv.Faces[i])-1]
+		is := hdri.Face(0, i)[len(hdri.Face(0, i))-1]
 		should := expected[i]
 		if math.Abs(float64(is-should)) > 0.001 {
 			t.Errorf("conversion result incorrect for face %d, should be: %.4f but is %.4f\n", i, should, is)
@@ -47,7 +47,7 @@ func TestConvertCl(t *testing.T) {
 	}
 }
 
-func TestConvolveCl(t *testing.T) {
+func TestConvolveDiffuseCl(t *testing.T) {
 	var conv ibl.Convolver
 	var err error
 
@@ -66,21 +66,21 @@ func TestConvolveCl(t *testing.T) {
 		<-onMainDone
 	}()
 
-	var iblEnv *ibl.IblEnv
+	var hdri *ibl.IblEnv
 	onMain <- func() {
-		iblEnv, err = conv.Convolve(testdata.iblEnv, 32)
+		hdri, err = conv.Convolve(testdata.iblEnv, 32)
 	}
 	<-onMainDone
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	saveResultIbl(t.Name(), iblEnv)
+	saveResultIbl(t.Name(), hdri)
 
 	expected := []float32{0.09986539, 0.09226462, 0.088060774, 0.10043078, 0.09293459, 0.09899382}
 
 	for i := 0; i < 6; i++ {
-		is := iblEnv.Faces[i][len(iblEnv.Faces[i])-1]
+		is := hdri.Face(0, i)[len(hdri.Face(0, i))-1]
 		should := expected[i]
 		if math.Abs(float64(is-should)) > 0.001 {
 			t.Errorf("conversion result incorrect for face %d, should be: %.4f but is %.4f\n", i, should, is)

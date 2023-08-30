@@ -19,6 +19,7 @@ import (
 	"advanced-gl/Project03/ibl"
 	. "advanced-gl/Project03/libgl"
 	. "advanced-gl/Project03/libscn"
+	"advanced-gl/Project03/libutil"
 )
 
 var Arguments struct {
@@ -64,7 +65,7 @@ func main() {
 	err = gl.InitWithProcAddrFunc(func(name string) unsafe.Pointer {
 		addr := glfw.GetProcAddress(name)
 		if addr == nil {
-			return unsafe.Pointer(uintptr(0xffff_ffff_ffff_ffff))
+			return unsafe.Pointer(libutil.InvalidAddress)
 		}
 		return addr
 	})
@@ -99,16 +100,18 @@ func main() {
 	lm.OnLoad(func(ctx *glfw.Window) {
 		pack = &DirPack{}
 		pack.AddIndexFile("assets/index.json")
-		pavementModel, err := pack.LoadModel("white_paint_floor")
+		mesh, err := pack.LoadMesh("plane")
+		check(err)
+		material, err := pack.LoadMaterial("steel")
 		check(err)
 
 		batch = NewRenderBatch()
-		batch.Upload(pavementModel.Mesh)
-		batch.AddMaterial(pavementModel.Material)
+		batch.Upload(mesh)
+		batch.AddMaterial(material)
 
 		for x := -2; x <= 2; x++ {
 			for z := -2; z <= 2; z++ {
-				batch.Add(pavementModel.Mesh.Name, pavementModel.Material.Name, InstanceAttributes{
+				batch.Add(mesh.Name, material.Name, InstanceAttributes{
 					ModelMatrix: mgl32.Translate3D(float32(x*2), 0, float32(z*2)),
 				})
 			}
@@ -131,12 +134,14 @@ func main() {
 	check(msFbo.Check(gl.DRAW_FRAMEBUFFER))
 
 	var (
-		pbrShader  UnboundShaderPipeline
-		skyShader  UnboundShaderPipeline
-		dd         *DirectBuffer
-		gui        *ImGui
-		envCubemap UnboundTexture
-		iblCubemap UnboundTexture
+		pbrShader          UnboundShaderPipeline
+		skyShader          UnboundShaderPipeline
+		dd                 *DirectBuffer
+		gui                *ImGui
+		envCubemap         UnboundTexture
+		iblDiffuseCubemap  UnboundTexture
+		iblSpecularCubemap UnboundTexture
+		iblBdrfLut         UnboundTexture
 	)
 
 	lm.OnLoad(func(ctx *glfw.Window) {
@@ -161,23 +166,33 @@ func main() {
 	skyBox.Layout(0, 0, 3, gl.FLOAT, false, 0)
 	skyBox.BindBuffer(0, skyBoxVbo, 0, 3*4)
 
-	cubemapSampler := NewSampler()
-	cubemapSampler.WrapMode(gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE)
-	cubemapSampler.FilterMode(gl.LINEAR, gl.LINEAR)
-
 	lm.OnLoad(func(ctx *glfw.Window) {
 		hdri, err := pack.LoadHdri("studio_small_02_4k")
 		check(err)
 		hdriIrradiance, err := pack.LoadHdri("studio_small_02_4k_irradiance")
 		check(err)
+		hdriReflection, err := pack.LoadHdri("studio_small_02_4k_specular")
+		check(err)
 
 		envCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
-		envCubemap.Allocate(1, gl.RGB16F, hdri.Size, hdri.Size, 0)
-		envCubemap.Load(0, hdri.Size, hdri.Size, 6, gl.RGB, hdri.Concat())
+		envCubemap.Allocate(1, gl.RGB16F, hdri.BaseSize, hdri.BaseSize, 0)
+		envCubemap.Load(0, hdri.BaseSize, hdri.BaseSize, 6, gl.RGB, hdri.All())
 
-		iblCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
-		iblCubemap.Allocate(1, gl.RGB16F, hdriIrradiance.Size, hdriIrradiance.Size, 0)
-		iblCubemap.Load(0, hdriIrradiance.Size, hdriIrradiance.Size, 6, gl.RGB, hdriIrradiance.Concat())
+		iblDiffuseCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
+		iblDiffuseCubemap.Allocate(1, gl.RGB16F, hdriIrradiance.BaseSize, hdriIrradiance.BaseSize, 0)
+		iblDiffuseCubemap.Load(0, hdriIrradiance.BaseSize, hdriIrradiance.BaseSize, 6, gl.RGB, hdriIrradiance.All())
+
+		iblSpecularCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
+		iblSpecularCubemap.Allocate(hdriReflection.Levels, gl.RGB16F, hdriReflection.BaseSize, hdriReflection.BaseSize, 0)
+		for i := 0; i < hdriReflection.Levels; i++ {
+			iblSpecularCubemap.Load(i, hdriReflection.Size(i), hdriReflection.Size(i), 6, gl.RGB, hdriReflection.Level(i))
+		}
+
+		lut, err := pack.LoadTexture("ibl_brdf_lut")
+		check(err)
+		iblBdrfLut = NewTexture(gl.TEXTURE_2D)
+		iblBdrfLut.Allocate(1, gl.RG8, lut.Rect.Dx(), lut.Rect.Dy(), 0)
+		iblBdrfLut.Load(0, lut.Rect.Dx(), lut.Rect.Dy(), 0, gl.RGBA, lut.Pix)
 	})
 
 	cam := &Camera{
@@ -188,6 +203,14 @@ func main() {
 		ClippingPlanes:    mgl32.Vec2{0.1, 1000},
 	}
 	cam.UpdateProjectionMatrix()
+
+	cubemapSampler := NewSampler()
+	cubemapSampler.WrapMode(gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE)
+	cubemapSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
+
+	lutSampler := NewSampler()
+	lutSampler.WrapMode(gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE)
+	lutSampler.FilterMode(gl.LINEAR, gl.LINEAR)
 
 	texAlbedoSampler := NewSampler()
 	texAlbedoSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
@@ -271,8 +294,12 @@ func main() {
 		texNormalSampler.Bind(1)
 		texOrmSampler.Bind(2)
 		cubemapSampler.Bind(3)
+		cubemapSampler.Bind(4)
+		lutSampler.Bind(5)
 
-		iblCubemap.Bind(3)
+		iblDiffuseCubemap.Bind(3)
+		iblSpecularCubemap.Bind(4)
+		iblBdrfLut.Bind(5)
 		for _, mat := range batch.Materials {
 			mat.Material.Albedo.Bind(0)
 			mat.Material.Normal.Bind(1)
@@ -364,8 +391,8 @@ func main() {
 					hdri, err := pack.LoadHdri(name)
 					check(err)
 					envCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
-					envCubemap.Allocate(1, gl.RGB16F, hdri.Size, hdri.Size, 0)
-					envCubemap.Load(0, hdri.Size, hdri.Size, 6, gl.RGB, hdri.Concat())
+					envCubemap.Allocate(1, gl.RGB16F, hdri.BaseSize, hdri.BaseSize, 0)
+					envCubemap.Load(0, hdri.BaseSize, hdri.BaseSize, 6, gl.RGB, hdri.All())
 					selectedHdri = name
 				}
 			}

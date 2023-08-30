@@ -89,21 +89,14 @@ type commonArgs struct {
 	compress int
 	out      string
 	quiet    bool
-	force    bool
 	supress  bool
 	ext      string
 	suffix   string
-	size     size
-	impl     impl
 }
 
-type convertArgs struct {
-	commonArgs
-}
-
-type convolveArgs struct {
-	commonArgs
-	samples int
+type sizeImplArgs struct {
+	size size
+	impl impl
 }
 
 var cargs *commonArgs
@@ -143,6 +136,12 @@ func printCommandUsage(cmd *command, suffix string) {
 func main() {
 	commands = append(commands, createConvertCommand())
 	commands = append(commands, createConvolveCommand())
+	commands = append(commands, createUpdateCommand())
+	commands = append(commands, createPrefilterCommand())
+
+	slices.SortFunc(commands, func(a, b *command) int {
+		return strings.Compare(a.Name, b.Name)
+	})
 
 	if len(os.Args) < 2 {
 		printGeneralUsage()
@@ -172,11 +171,13 @@ func registerCommonFlags(flags *flag.FlagSet, args *commonArgs) {
 	flags.StringVar(&args.out, "o", args.out, "shorthand for out")
 	flags.BoolVar(&args.quiet, "quiet", args.quiet, "disables informational logging")
 	flags.BoolVar(&args.quiet, "q", args.quiet, "shorthand for quiet")
-	flags.BoolVar(&args.force, "force", args.force, "overwrite files")
-	flags.BoolVar(&args.force, "f", args.force, "shorthand for force")
 	flags.BoolVar(&args.supress, "supress", args.supress, "disables soft error logging")
 	flags.StringVar(&args.ext, "ext", args.ext, "the result file extension")
 	flags.StringVar(&args.suffix, "suffix", args.suffix, "the result file suffix")
+
+}
+
+func registerSizeImplFlag(flags *flag.FlagSet, args *sizeImplArgs) {
 	flags.Var(&args.size, "size", "the cubemap face resolution, either % of the input width or absolute px")
 	flags.Var(&args.size, "s", "shorthand for size")
 	flags.Var(&args.impl, "impl", "the conversion implementation; opencl, opengl or software")

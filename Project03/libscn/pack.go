@@ -19,6 +19,7 @@ import (
 
 type AssetIndex struct {
 	Materials []string `json:"materials"`
+	Textures  []string `json:"textures"`
 	Meshes    []string `json:"meshes"`
 	Models    []string `json:"models"`
 	Shaders   []string `json:"shaders"`
@@ -61,8 +62,10 @@ type DirPack struct {
 	MeshIndex     map[string]string
 	ModelIndex    map[string]string
 	MaterialIndex map[string]string
+	TextureIndex  map[string]string
 	ShaderIndex   map[string]string
 	HdriIndex     map[string]string
+	init          bool
 }
 
 func (pack *DirPack) AddIndexFile(name string) error {
@@ -86,24 +89,14 @@ func (pack *DirPack) AddIndex(r io.Reader, root string) error {
 		return err
 	}
 
-	if pack.MeshIndex == nil {
+	if !pack.init {
 		pack.MeshIndex = map[string]string{}
-	}
-
-	if pack.ModelIndex == nil {
 		pack.ModelIndex = map[string]string{}
-	}
-
-	if pack.MaterialIndex == nil {
 		pack.MaterialIndex = map[string]string{}
-	}
-
-	if pack.ShaderIndex == nil {
 		pack.ShaderIndex = map[string]string{}
-	}
-
-	if pack.HdriIndex == nil {
 		pack.HdriIndex = map[string]string{}
+		pack.TextureIndex = map[string]string{}
+		pack.init = true
 	}
 
 	root = path.Clean(root)
@@ -124,6 +117,10 @@ func (pack *DirPack) AddIndex(r io.Reader, root string) error {
 		return err
 	}
 	err = pack.addAllMatches(root, index.Hdris, pack.HdriIndex)
+	if err != nil {
+		return err
+	}
+	err = pack.addAllMatches(root, index.Textures, pack.TextureIndex)
 	if err != nil {
 		return err
 	}
@@ -333,6 +330,14 @@ func (pack *DirPack) LoadMaterial(name string) (*Material, error) {
 		Normal: normalTexture,
 		ORM:    ormTexture,
 	}, nil
+}
+
+func (pack *DirPack) LoadTexture(name string) (*stbi.RgbaLdr, error) {
+	filename, ok := pack.TextureIndex[name]
+	if !ok {
+		return nil, fmt.Errorf("texture %q is not registered in this pack", name)
+	}
+	return pack.LoadTextureImage(filename)
 }
 
 func (pack *DirPack) LoadTextureImage(filename string) (*stbi.RgbaLdr, error) {

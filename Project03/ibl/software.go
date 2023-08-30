@@ -31,7 +31,7 @@ func (*swConverter) Convert(image *stbi.RgbaHdr, size int) (*IblEnv, error) {
 		result[i*3+2] = sb
 	})
 
-	return NewIblEnv(result, size), nil
+	return NewIblEnv(result, size, 1), nil
 }
 
 // 1/(2pi), 1/pi
@@ -106,17 +106,17 @@ func sampleBilinear(w, h int, channels int, pix []float32, u, v float32) (r, g, 
 func (conv *swConverter) Release() {
 }
 
-type swConvolver struct {
+type swDiffuseConvolver struct {
 	samples []sample
 }
 
-func NewSwConvolver(quality int) (conv Convolver) {
-	return &swConvolver{
-		samples: generateConvolutionSamples(quality),
+func NewSwDiffuseConvolver(quality int) (conv Convolver) {
+	return &swDiffuseConvolver{
+		samples: generateDiffuseConvolutionSamples(quality),
 	}
 }
 
-func (conv *swConvolver) Release() {
+func (conv *swDiffuseConvolver) Release() {
 }
 
 type sample struct {
@@ -126,7 +126,7 @@ type sample struct {
 }
 
 // quality >= 0
-func generateConvolutionSamples(quality int) []sample {
+func generateDiffuseConvolutionSamples(quality int) []sample {
 
 	if quality == 0 {
 		// only one sample directly upwards
@@ -215,47 +215,57 @@ func sampleCubeMap(rx, ry, rz float32) (face int, u, v float32) {
 	return
 }
 
-func (conv *swConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error) {
-	result := make([]float32, size*size*6*3)
+func normalize(x, y, z float32) (float32, float32, float32) {
+	len := math32.Sqrt(x*x + y*y + z*z)
+	return x / len, y / len, z / len
+}
+
+func cross(ax, ay, az, bx, by, bz float32) (float32, float32, float32) {
+	x := ay*bz - az*by
+	y := az*bx - ax*bz
+	z := ax*by - ay*bx
+	return x, y, z
+}
+
+func dot(ax, ay, az, bx, by, bz float32) float32 {
+	return ax*bx + ay*by + az*bz
+}
+
+func transform(vx, vy, vz, xx, xy, xz, yx, yy, yz, zx, zy, zz float32) (float32, float32, float32) {
+	x := (vx * xx) + (vy * yx) + (vz * zx)
+	y := (vx * xy) + (vy * yy) + (vz * zy)
+	z := (vx * xz) + (vy * yz) + (vz * zz)
+	return x, y, z
+}
+
+func (conv *swDiffuseConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error) {
+	result := make([]float32, calcCubeMapPixels(size, 1)*3)
 
 	forEachCubeMapPixel(size, func(face, pu, pv int, cx, cy, cz float32, i int) {
-		clen := math32.Sqrt(cx*cx + cy*cy + cz*cz)
-		nx := cx / clen
-		ny := cy / clen
-		nz := cz / clen
+		nx, ny, nz := normalize(cx, cy, cz)
 
-		// cross(normal, (0, 1, 0))
-		rx := ny*0 - nz*1
-		ry := nz*0 - nx*0
-		rz := nx*1 - ny*0
-		rlen := math32.Sqrt(rx*rx + ry*ry + rz*rz)
-		rx /= rlen
-		ry /= rlen
-		rz /= rlen
+		var ux, uy, uz float32 = 0.0, 1.0, 0.0
+		if math32.Abs(ny) < 0.999 {
+			ux, uy, uz = 0.0, 0.0, 1.0
+		}
 
-		// corss(normal, right)
-		ux := ny*rz - nz*ry
-		uy := nz*rx - nx*rz
-		uz := nx*ry - ny*rx
-		ulen := math32.Sqrt(ux*ux + uy*uy + uz*uz)
-		ux /= ulen
-		uy /= ulen
-		uz /= ulen
+		// right = cross(normal, up)
+		rx, ry, rz := normalize(cross(nx, ny, nz, ux, uy, uz))
+		// up = corss(normal, right)
+		ux, uy, uz = normalize(cross(nx, ny, nz, rx, ry, rz))
 
 		var cr, cg, cb float32
 		var count int
 		for _, s := range conv.samples {
 
-			dx := (s.x * rx) + (s.y * ux) + (s.z * nx)
-			dy := (s.x * ry) + (s.y * uy) + (s.z * ny)
-			dz := (s.x * rz) + (s.y * uz) + (s.z * nz)
+			dx, dy, dz := transform(s.x, s.y, s.z, rx, ry, rz, ux, uy, uz, nx, ny, nz)
 
 			if dx == 0.0 && dy == 0.0 && dz == 0.0 {
 				continue
 			}
 
 			sface, su, sv := sampleCubeMap(dx, dy, dz)
-			sr, sg, sb := sampleBilinear(env.Size, env.Size, 3, env.Faces[sface], su, sv)
+			sr, sg, sb := sampleBilinear(env.BaseSize, env.BaseSize, 3, env.Face(0, sface), su, sv)
 
 			cr += sr * s.weight
 			cg += sg * s.weight
@@ -269,7 +279,7 @@ func (conv *swConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error) {
 		result[i*3+2] = cb * math32.Pi / float32(count)
 	})
 
-	return NewIblEnv(result, size), nil
+	return NewIblEnv(result, size, 1), nil
 }
 
 func forEachCubeMapPixel(resolution int, cb func(face, pu, pv int, cx, cy, cz float32, i int)) {
@@ -330,4 +340,124 @@ func forEachCubeMapPixel(resolution int, cb func(face, pu, pv int, cx, cy, cz fl
 		}
 		face++
 	}
+}
+
+type swSpecularConvolver struct {
+	samples [][]sample
+	levels  int
+}
+
+func NewSwSpecularConvolver(quality int, levels int) (conv Convolver) {
+	return &swSpecularConvolver{
+		samples: generateSpecularConvolutionSamples(quality, levels),
+		levels:  levels,
+	}
+}
+
+func (conv *swSpecularConvolver) Release() {
+}
+
+func generateSpecularConvolutionSamples(count int, levels int) [][]sample {
+	// store all samples in contiguous memory
+	samples := make([]sample, count*(levels-1)+1)
+	slicedSamples := make([][]sample, levels)
+	// roughtness 0 only requires a single sample
+	samples[0].x = 0
+	samples[0].y = 0
+	samples[0].z = 1
+	samples[0].weight = 1.0
+	slicedSamples[0] = samples[0:1:1]
+	i := 1
+	for l := 1; l < levels; l++ {
+		start := i
+		roughness := float32(l) / float32(levels-1)
+		for si := uint32(0); si < uint32(count); si++ {
+			su, sv := hammersley(si, uint32(count))
+			hx, hy, hz := importanceSampleGGX(su, sv, roughness)
+			samples[i].x = hx
+			samples[i].y = hy
+			samples[i].z = hz
+			samples[i].weight = 1.0
+			i++
+		}
+		slicedSamples[l] = samples[start:i:i]
+	}
+
+	return slicedSamples
+}
+
+func radicalInverseVdC(bits uint32) float32 {
+	bits = (bits << 16) | (bits >> 16)
+	bits = ((bits & 0x55555555) << 1) | ((bits & 0xAAAAAAAA) >> 1)
+	bits = ((bits & 0x33333333) << 2) | ((bits & 0xCCCCCCCC) >> 2)
+	bits = ((bits & 0x0F0F0F0F) << 4) | ((bits & 0xF0F0F0F0) >> 4)
+	bits = ((bits & 0x00FF00FF) << 8) | ((bits & 0xFF00FF00) >> 8)
+	return float32(bits) * 2.3283064365386963e-10 // / 0x100000000
+}
+
+func hammersley(i, N uint32) (x, y float32) {
+	return float32(i) / float32(N), radicalInverseVdC(i)
+}
+
+func importanceSampleGGX(su, sv float32, roughness float32) (x, y, z float32) {
+	a := roughness * roughness
+
+	phi := 2.0 * math32.Pi * su
+	cosTheta := math32.Sqrt((1.0 - sv) / (1.0 + (a*a-1.0)*sv))
+	sinTheta := math32.Sqrt(1.0 - cosTheta*cosTheta)
+
+	// from spherical coordinates to cartesian coordinates
+	x = math32.Cos(phi) * sinTheta
+	y = math32.Sin(phi) * sinTheta
+	z = cosTheta
+
+	return
+}
+
+func (conv *swSpecularConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error) {
+	result := make([]float32, calcCubeMapPixels(size, conv.levels)*3)
+	lvlsize := size
+	for lvl := 0; lvl < conv.levels; lvl++ {
+		lvlStart, lvlEnd := calcCubeMapOffset(size, lvl)
+		lvlResult := result[lvlStart*3 : lvlEnd*3]
+		forEachCubeMapPixel(lvlsize, func(face, pu, pv int, cx, cy, cz float32, i int) {
+			nx, ny, nz := normalize(cx, cy, cz)
+			vx, vy, vz := nx, ny, nz
+
+			var cr, cg, cb float32
+			var totalWeight float32
+			for _, s := range conv.samples[lvl] {
+				// from tangent-space vector to world-space sample vector
+				var upx, upy, upz float32 = 0.0, 0.0, 1.0
+				if math32.Abs(nz) < 0.999 {
+					upx, upy, upz = 1.0, 0.0, 0.0
+				}
+				tanx, tany, tanz := normalize(cross(upx, upy, upz, nx, ny, nz))
+				bitanx, bitany, bitanz := cross(nx, ny, nz, tanx, tany, tanz)
+
+				hx, hy, hz := normalize(transform(s.x, s.y, s.z, tanx, tany, tanz, bitanx, bitany, bitanz, nx, ny, nz))
+				vdoth := 2 * dot(vx, vy, vz, hx, hy, hz)
+				lx, ly, lz := normalize(vdoth*hx-vx, vdoth*hy-vy, vdoth*hz-vz)
+
+				ndotl := math32.Max(dot(nx, ny, nz, lx, ly, lz), 0.0)
+				if ndotl > 0 {
+					sface, su, sv := sampleCubeMap(lx, ly, lz)
+					sr, sg, sb := sampleBilinear(env.BaseSize, env.BaseSize, 3, env.Face(0, sface), su, sv)
+
+					cr += sr * ndotl
+					cg += sg * ndotl
+					cb += sb * ndotl
+
+					totalWeight += ndotl
+				}
+			}
+
+			lvlResult[i*3+0] = cr / totalWeight
+			lvlResult[i*3+1] = cg / totalWeight
+			lvlResult[i*3+2] = cb / totalWeight
+		})
+		lvlsize /= 2
+	}
+
+	return NewIblEnv(result, size, conv.levels), nil
 }

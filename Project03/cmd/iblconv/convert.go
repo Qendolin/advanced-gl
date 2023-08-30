@@ -13,11 +13,18 @@ import (
 	"time"
 )
 
+type convertArgs struct {
+	commonArgs
+	sizeImplArgs
+}
+
 func createConvertCommand() *command {
 
 	args := convertArgs{
 		commonArgs: commonArgs{
-			ext:  ".iblenv",
+			ext: ".iblenv",
+		},
+		sizeImplArgs: sizeImplArgs{
 			impl: implCl,
 			size: size{
 				unit:    unitPercent,
@@ -29,6 +36,7 @@ func createConvertCommand() *command {
 	flags := flag.NewFlagSet("convert", flag.ExitOnError)
 
 	registerCommonFlags(flags, &args.commonArgs)
+	registerSizeImplFlag(flags, &args.sizeImplArgs)
 
 	return &command{
 		Name: "convert",
@@ -50,15 +58,11 @@ func runConvert(args convertArgs, inputFiles []string) {
 	runtime.LockOSThread()
 
 	ext := cargs.suffix + cargs.ext
-	outFlags := os.O_CREATE | os.O_WRONLY
-	if cargs.force {
-		outFlags |= os.O_TRUNC
-	}
 
 	var err error
 	var conv ibl.Converter
 
-	switch cargs.impl {
+	switch args.impl {
 	case implCl:
 		conv, err = ibl.NewClConverter(ibl.DeviceTypeGPU)
 		if err == nil {
@@ -86,7 +90,7 @@ func runConvert(args convertArgs, inputFiles []string) {
 		if !cargs.quiet {
 			fmt.Printf("Processing file %d/%d %q ...\n", i+1, len(inputFiles), filepath.ToSlash(filepath.Clean(p)))
 		}
-		err := convertFile(p, ext, outFlags, conv)
+		err := convertFile(args, p, ext, conv)
 		softerr(err)
 		if err == nil {
 			success++
@@ -98,7 +102,7 @@ func runConvert(args convertArgs, inputFiles []string) {
 	}
 }
 
-func convertFile(p string, ext string, outFlags int, conv ibl.Converter) error {
+func convertFile(args convertArgs, p string, ext string, conv ibl.Converter) error {
 	inFile, err := os.Open(p)
 	if err != nil {
 		return err
@@ -114,7 +118,7 @@ func convertFile(p string, ext string, outFlags int, conv ibl.Converter) error {
 	defer close(hdr)
 
 	outFilename := filepath.Join(cargs.out, strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))+ext)
-	outFile, err := os.OpenFile(outFilename, outFlags, 0666)
+	outFile, err := os.OpenFile(outFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
 	}
@@ -126,9 +130,9 @@ func convertFile(p string, ext string, outFlags int, conv ibl.Converter) error {
 		return fmt.Errorf("image has zero size %dx%d", hdr.Rect.Dx(), hdr.Rect.Dy())
 	}
 
-	size := cargs.size.Calc(hdr.Rect.Dx())
+	size := args.size.Calc(hdr.Rect.Dx())
 	if !cargs.quiet {
-		fmt.Printf("Converting to %dx%dx6 cubemap ...\n", size, size)
+		fmt.Printf("Converting to %dx%d cubemap ...\n", size, size)
 	}
 
 	iblEnv, err := conv.Convert(hdr, size)

@@ -47,7 +47,7 @@ class ObjectExport(bpy.types.Operator):
     write_scene: bpy.props.BoolProperty(
         name="Write .scn Files",
         description="",
-        default=True,
+        default=False,
     )
     global_scale: bpy.props.FloatProperty(
         name="Scale",
@@ -80,12 +80,13 @@ class ObjectExport(bpy.types.Operator):
 
         if self.write_geometry:
             progress = 0
-            meshes = set([ob.data for ob in obs if ob.type == 'MESH'])
-            count = len(obs)
+            mesh_obs = set([ob for ob in obs if ob.type == 'MESH'])
+            count = len(mesh_obs)
             context.window_manager.progress_begin(0, count)
-            for me in meshes:
-                print(f"Writing '{me.name}' [{progress+1}/{count}]...")
-                filename = re.sub(r'[^\w\s-]', '', me.name.lower())
+            for ob in mesh_obs:
+                me = ob.data
+                print(f"Writing '{ob.name}' [{progress+1}/{count}]...")
+                filename = re.sub(r'[^\w\s-]', '', ob.name.lower())
                 filename = re.sub(r'[-\s]+', '-', filename).strip('-_')
                 path = os.path.join(self.directory, filename + ".geo")
                 with open(path, 'wb') as file:

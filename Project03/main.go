@@ -75,9 +75,10 @@ func main() {
 	GlEnv = GetGlEnv()
 	Input = NewInputManager(ctx)
 
-	GlState.Enable(gl.TEXTURE_CUBE_MAP_SEAMLESS)
-	GlState.Enable(gl.DEBUG_OUTPUT)
-	GlState.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+	// FIXME: I can't use GlState here because it would be disabled by SetEnabled
+	gl.Enable(gl.TEXTURE_CUBE_MAP_SEAMLESS)
+	gl.Enable(gl.DEBUG_OUTPUT)
+	gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
 
 	gl.DebugMessageCallback(func(source, gltype, id, severity uint32, length int32, message string, userParam unsafe.Pointer) {
 		if gltype == gl.DEBUG_TYPE_PUSH_GROUP || gltype == gl.DEBUG_TYPE_POP_GROUP {
@@ -100,9 +101,11 @@ func main() {
 	lm.OnLoad(func(ctx *glfw.Window) {
 		pack = &DirPack{}
 		pack.AddIndexFile("assets/index.json")
+		// mesh, err := pack.LoadMesh("array_spheres")
 		mesh, err := pack.LoadMesh("plane")
 		check(err)
-		material, err := pack.LoadMaterial("steel")
+		// material, err := pack.LoadMaterial("array_test")
+		material, err := pack.LoadMaterial("square_floor")
 		check(err)
 
 		batch = NewRenderBatch()
@@ -116,6 +119,10 @@ func main() {
 				})
 			}
 		}
+
+		// batch.Add(mesh.Name, material.Name, InstanceAttributes{
+		// 	ModelMatrix: mgl32.Scale3D(0.1, 0.1, 0.1),
+		// })
 	})
 
 	viewportDims := [4]int32{}
@@ -169,7 +176,7 @@ func main() {
 	lm.OnLoad(func(ctx *glfw.Window) {
 		hdri, err := pack.LoadHdri("studio_small_02_4k")
 		check(err)
-		hdriIrradiance, err := pack.LoadHdri("studio_small_02_4k_irradiance")
+		hdriIrradiance, err := pack.LoadHdri("studio_small_02_4k_diffuse")
 		check(err)
 		hdriReflection, err := pack.LoadHdri("studio_small_02_4k_specular")
 		check(err)
@@ -188,16 +195,16 @@ func main() {
 			iblSpecularCubemap.Load(i, hdriReflection.Size(i), hdriReflection.Size(i), 6, gl.RGB, hdriReflection.Level(i))
 		}
 
-		lut, err := pack.LoadTexture("ibl_brdf_lut")
+		lut, err := pack.LoadTextureFloat("ibl_brdf_lut")
 		check(err)
 		iblBdrfLut = NewTexture(gl.TEXTURE_2D)
-		iblBdrfLut.Allocate(1, gl.RG8, lut.Rect.Dx(), lut.Rect.Dy(), 0)
-		iblBdrfLut.Load(0, lut.Rect.Dx(), lut.Rect.Dy(), 0, gl.RGBA, lut.Pix)
+		iblBdrfLut.Allocate(1, gl.RG32F, lut.Width, lut.Height, 0)
+		iblBdrfLut.Load(0, lut.Width, lut.Height, 0, gl.RG, lut.Pix)
 	})
 
 	cam := &Camera{
-		Position:          mgl32.Vec3{0.0, 1.0, 0.0},
-		Orientation:       mgl32.Vec3{90.0, 0.0, 0.0},
+		Position:          mgl32.Vec3{0.0, 1.0, -1.0},
+		Orientation:       mgl32.Vec3{0.0, 180.0, 0.0},
 		VerticalFov:       70,
 		ViewportDimension: mgl32.Vec2{float32(viewportWidth), float32(viewportHeight)},
 		ClippingPlanes:    mgl32.Vec2{0.1, 1000},
@@ -246,9 +253,12 @@ func main() {
 	wireframe := false
 	lodBias := []float32{0.0, 0.0, -3.0}
 	reload := false
+	speed := float32(1.0)
 	var (
-		selectedMaterial string
-		selectedHdri     string
+		selectedMaterial  string
+		selectedHdriName  string
+		selectedHdriLevel int32
+		selectedHdri      *ibl.IblEnv
 	)
 
 	for !ctx.ShouldClose() {
@@ -259,7 +269,7 @@ func main() {
 
 		movement := Input.GetMovement(glfw.KeyW, glfw.KeyS, glfw.KeyA, glfw.KeyD, glfw.KeySpace, glfw.KeyLeftControl)
 		if movement.LenSqr() != 0 {
-			movement = movement.Normalize().Mul(Input.TimeDelta())
+			movement = movement.Normalize().Mul(Input.TimeDelta() * speed)
 			cam.Fly(movement)
 		}
 		if Input.IsMouseDown(glfw.MouseButtonRight) {
@@ -345,6 +355,7 @@ func main() {
 		if im.CollapsingHeader("Camera") {
 			im.DragFloat3("Pos", (*[3]float32)(&cam.Position))
 			im.DragFloat3("Dir", (*[3]float32)(&cam.Orientation))
+			im.DragFloat("Spd", &speed)
 
 		}
 		im.PopID()
@@ -383,21 +394,30 @@ func main() {
 			im.EndCombo()
 		}
 
-		if im.BeginCombo("Environment", selectedHdri) {
+		if im.BeginCombo("Environment", selectedHdriName) {
 			hdris := maps.Keys(pack.HdriIndex)
 			slices.Sort(hdris)
 			for _, name := range hdris {
 				if im.Selectable(name) {
 					hdri, err := pack.LoadHdri(name)
 					check(err)
+					selectedHdri = hdri
 					envCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
 					envCubemap.Allocate(1, gl.RGB16F, hdri.BaseSize, hdri.BaseSize, 0)
 					envCubemap.Load(0, hdri.BaseSize, hdri.BaseSize, 6, gl.RGB, hdri.All())
-					selectedHdri = name
+					selectedHdriName = name
 				}
 			}
-
 			im.EndCombo()
+		}
+
+		if im.SliderInt("HDRI Level", &selectedHdriLevel, 0, 4) {
+			if selectedHdriLevel < int32(selectedHdri.Levels) {
+				envCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
+				sz := selectedHdri.Size(int(selectedHdriLevel))
+				envCubemap.Allocate(1, gl.RGB16F, sz, sz, 0)
+				envCubemap.Load(0, sz, sz, 6, gl.RGB, selectedHdri.Level(int(selectedHdriLevel)))
+			}
 		}
 
 		im.End()

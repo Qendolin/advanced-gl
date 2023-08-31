@@ -3,6 +3,7 @@ package libscn
 import (
 	"advanced-gl/Project03/ibl"
 	"advanced-gl/Project03/libgl"
+	"advanced-gl/Project03/libio"
 	"advanced-gl/Project03/stbi"
 	"encoding/json"
 	"fmt"
@@ -310,18 +311,18 @@ func (pack *DirPack) LoadMaterial(name string) (*Material, error) {
 	}
 
 	albeoTexture := libgl.NewTexture(gl.TEXTURE_2D)
-	albeoTexture.Allocate(0, gl.RGBA8, albedo.Rect.Dx(), albedo.Rect.Dy(), 0)
-	albeoTexture.Load(0, albedo.Rect.Dx(), albedo.Rect.Dy(), 0, gl.RGBA, albedo.Pix)
+	albeoTexture.Allocate(0, gl.RGBA8, albedo.Width, albedo.Height, 0)
+	albeoTexture.Load(0, albedo.Width, albedo.Height, 0, gl.RGBA, albedo.Pix)
 	albeoTexture.GenerateMipmap()
 
 	normalTexture := libgl.NewTexture(gl.TEXTURE_2D)
-	normalTexture.Allocate(0, gl.RGB8, normal.Rect.Dx(), normal.Rect.Dy(), 0)
-	normalTexture.Load(0, normal.Rect.Dx(), normal.Rect.Dy(), 0, gl.RGBA, normal.Pix)
+	normalTexture.Allocate(0, gl.RGB8, normal.Width, normal.Height, 0)
+	normalTexture.Load(0, normal.Width, normal.Height, 0, gl.RGBA, normal.Pix)
 	normalTexture.GenerateMipmap()
 
 	ormTexture := libgl.NewTexture(gl.TEXTURE_2D)
-	ormTexture.Allocate(0, gl.RGB8, orm.Rect.Dx(), orm.Rect.Dy(), 0)
-	ormTexture.Load(0, orm.Rect.Dx(), orm.Rect.Dy(), 0, gl.RGBA, orm.Pix)
+	ormTexture.Allocate(0, gl.RGB8, orm.Width, orm.Height, 0)
+	ormTexture.Load(0, orm.Width, orm.Height, 0, gl.RGBA, orm.Pix)
 	ormTexture.GenerateMipmap()
 
 	return &Material{
@@ -332,7 +333,7 @@ func (pack *DirPack) LoadMaterial(name string) (*Material, error) {
 	}, nil
 }
 
-func (pack *DirPack) LoadTexture(name string) (*stbi.RgbaLdr, error) {
+func (pack *DirPack) LoadTexture(name string) (*libio.IntImage, error) {
 	filename, ok := pack.TextureIndex[name]
 	if !ok {
 		return nil, fmt.Errorf("texture %q is not registered in this pack", name)
@@ -340,15 +341,46 @@ func (pack *DirPack) LoadTexture(name string) (*stbi.RgbaLdr, error) {
 	return pack.LoadTextureImage(filename)
 }
 
-func (pack *DirPack) LoadTextureImage(filename string) (*stbi.RgbaLdr, error) {
+func (pack *DirPack) LoadTextureFloat(name string) (*libio.FloatImage, error) {
+	filename, ok := pack.TextureIndex[name]
+	if !ok {
+		return nil, fmt.Errorf("texture %q is not registered in this pack", name)
+	}
+	return pack.LoadTextureImageFloat(filename)
+}
+
+func (pack *DirPack) LoadTextureImage(filename string) (*libio.IntImage, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("could not open texture image file %q: %w", filename, err)
 	}
 	defer file.Close()
-	stbi.Default.FlipVertically = true
-	stbi.Default.CopyData = true
-	return stbi.Load(file)
+
+	if strings.HasSuffix(filename, ".png") || strings.HasSuffix(filename, ".jpg") {
+		stbi.Default.FlipVertically = true
+		stbi.Default.CopyData = true
+		img, err := stbi.Load(file)
+		if err != nil {
+			return nil, err
+		}
+		return libio.NewIntImage(img.Pix, 4, img.Rect.Dx(), img.Rect.Dy()), nil
+	} else {
+		return nil, fmt.Errorf("unsupported int image file type %q", filename)
+	}
+}
+
+func (pack *DirPack) LoadTextureImageFloat(filename string) (*libio.FloatImage, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("could not open texture image file %q: %w", filename, err)
+	}
+	defer file.Close()
+
+	if strings.HasSuffix(filename, ".f32") {
+		return libio.DecodeFloatImage(file)
+	} else {
+		return nil, fmt.Errorf("unsupported float image file type %q", filename)
+	}
 }
 
 func (pack *DirPack) LoadMesh(name string) (*Mesh, error) {
@@ -386,12 +418,7 @@ func (pack *DirPack) LoadHdri(name string) (*ibl.IblEnv, error) {
 	}
 	defer file.Close()
 
-	var src io.Reader = file
-	if strings.HasSuffix(filename, ".lz4") {
-		src = lz4.NewReader(file)
-	}
-
-	mesh, err := ibl.DecodeIblEnv(src)
+	mesh, err := ibl.DecodeIblEnv(file)
 	if err != nil {
 		return nil, fmt.Errorf("could not decode hdri file %q: %w", filename, err)
 	}

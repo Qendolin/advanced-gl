@@ -244,21 +244,21 @@ func (conv *swDiffuseConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error)
 	forEachCubeMapPixel(size, func(face, pu, pv int, cx, cy, cz float32, i int) {
 		nx, ny, nz := normalize(cx, cy, cz)
 
-		var ux, uy, uz float32 = 0.0, 1.0, 0.0
-		if math32.Abs(ny) < 0.999 {
-			ux, uy, uz = 0.0, 0.0, 1.0
+		var upx, upy, upz float32 = 0.0, 1.0, 0.0
+		if math32.Abs(ny) >= 0.999 {
+			upx, upy, upz = 0.0, 0.0, 1.0
 		}
 
-		// right = cross(normal, up)
-		rx, ry, rz := normalize(cross(nx, ny, nz, ux, uy, uz))
-		// up = corss(normal, right)
-		ux, uy, uz = normalize(cross(nx, ny, nz, rx, ry, rz))
+		// tangent = cross(up, normal)
+		tx, ty, tz := normalize(cross(upx, upy, upz, nx, ny, nz))
+		// bitangent = corss(normal, right)
+		bx, by, bz := normalize(cross(nx, ny, nz, tx, ty, tz))
 
 		var cr, cg, cb float32
 		var count int
 		for _, s := range conv.samples {
 
-			dx, dy, dz := transform(s.x, s.y, s.z, rx, ry, rz, ux, uy, uz, nx, ny, nz)
+			dx, dy, dz := transform(s.x, s.y, s.z, tx, ty, tz, bx, by, bz, nx, ny, nz)
 
 			if dx == 0.0 && dy == 0.0 && dz == 0.0 {
 				continue
@@ -357,6 +357,17 @@ func NewSwSpecularConvolver(quality int, levels int) (conv Convolver) {
 func (conv *swSpecularConvolver) Release() {
 }
 
+func generateHammersleySequence(count int) [][2]float32 {
+	samples := make([][2]float32, count)
+	for i := 0; i < count; i++ {
+		su, sv := hammersley(uint32(i), uint32(count))
+		samples[i][0] = su
+		samples[i][1] = sv
+	}
+
+	return samples
+}
+
 func generateSpecularConvolutionSamples(count int, levels int) [][]sample {
 	// store all samples in contiguous memory
 	samples := make([]sample, count*(levels-1)+1)
@@ -368,12 +379,15 @@ func generateSpecularConvolutionSamples(count int, levels int) [][]sample {
 	samples[0].weight = 1.0
 	slicedSamples[0] = samples[0:1:1]
 	i := 1
+
+	hammersleySeq := generateHammersleySequence(count)
+
 	for l := 1; l < levels; l++ {
 		start := i
 		roughness := float32(l) / float32(levels-1)
-		for si := uint32(0); si < uint32(count); si++ {
-			su, sv := hammersley(si, uint32(count))
-			hx, hy, hz := importanceSampleGGX(su, sv, roughness)
+		for si := 0; si < count; si++ {
+			hs := hammersleySeq[si]
+			hx, hy, hz := importanceSampleGGX(hs[0], hs[1], roughness)
 			samples[i].x = hx
 			samples[i].y = hy
 			samples[i].z = hz
@@ -423,19 +437,19 @@ func (conv *swSpecularConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error
 		forEachCubeMapPixel(lvlsize, func(face, pu, pv int, cx, cy, cz float32, i int) {
 			nx, ny, nz := normalize(cx, cy, cz)
 			vx, vy, vz := nx, ny, nz
+			// from tangent-space vector to world-space sample vector
+			var upx, upy, upz float32 = 0.0, 0.0, 1.0
+			if math32.Abs(nz) >= 0.999 {
+				upx, upy, upz = 1.0, 0.0, 0.0
+			}
+			tx, ty, tz := normalize(cross(upx, upy, upz, nx, ny, nz))
+			bx, by, bz := cross(nx, ny, nz, tx, ty, tz)
 
 			var cr, cg, cb float32
 			var totalWeight float32
 			for _, s := range conv.samples[lvl] {
-				// from tangent-space vector to world-space sample vector
-				var upx, upy, upz float32 = 0.0, 0.0, 1.0
-				if math32.Abs(nz) < 0.999 {
-					upx, upy, upz = 1.0, 0.0, 0.0
-				}
-				tanx, tany, tanz := normalize(cross(upx, upy, upz, nx, ny, nz))
-				bitanx, bitany, bitanz := cross(nx, ny, nz, tanx, tany, tanz)
 
-				hx, hy, hz := normalize(transform(s.x, s.y, s.z, tanx, tany, tanz, bitanx, bitany, bitanz, nx, ny, nz))
+				hx, hy, hz := normalize(transform(s.x, s.y, s.z, tx, ty, tz, bx, by, bz, nx, ny, nz))
 				vdoth := 2 * dot(vx, vy, vz, hx, hy, hz)
 				lx, ly, lz := normalize(vdoth*hx-vx, vdoth*hy-vy, vdoth*hz-vz)
 

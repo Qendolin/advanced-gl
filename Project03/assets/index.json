@@ -1,6 +1,6 @@
 {
 	"materials": ["./materials/*.json"],
-	"textures": ["./materials/*.png", "./textures/*.png"],
+	"textures": ["./materials/*.png", "./textures/*.png", "./textures/*.f32"],
 	"models": ["./models/*.json"],
 	"meshes": ["./meshes/*.geo"],
 	"shaders": ["./shaders/*.json"],

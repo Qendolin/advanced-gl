@@ -13,7 +13,7 @@ __constant float4 xTransforms[6] = {
     (float4)(1.0f, 0.0f, 0.0f, 0.0f), (float4)(1.0f, 0.0f, 0.0f, 0.0f),
     (float4)(1.0f, 0.0f, 0.0f, 0.0f), (float4)(-1.0f, 0.0f, 0.0f, 0.0f)};
 __constant float4 yTransforms[6] = {
-    (float4)(0.0, -1.0f, 0.0f, 0.0f),  (float4)(0.0f, -1.0f, 0.0f, 0.0f),
+    (float4)(0.0f, -1.0f, 0.0f, 0.0f), (float4)(0.0f, -1.0f, 0.0f, 0.0f),
     (float4)(0.0f, 0.0f, 1.0f, 0.0f),  (float4)(0.0f, 0.0f, -1.0f, 0.0f),
     (float4)(0.0f, -1.0f, 0.0f, 0.0f), (float4)(0.0f, -1.0f, 0.0f, 0.0f)};
 __constant float4 zTransforms[6] = {
@@ -22,7 +22,7 @@ __constant float4 zTransforms[6] = {
     (float4)(0.0f, 0.0f, 1.0f, 0.0f),  (float4)(0.0f, 0.0f, -1.0f, 0.0f)};
 
 float2 projectSphericalMap(float4 dir) {
-  float2 uv = (float2)(atan2pi(dir.z, dir.x) * 0.5, asinpi(dir.y));
+  float2 uv = (float2)(atan2pi(dir.z, dir.x) * 0.5f, asinpi(dir.y));
   uv += (float2)(0.5f, 0.5f);
   return uv;
 }
@@ -43,8 +43,8 @@ __kernel void reproject_environment(__read_only image2d_t srcImage,
   }
 
   // The value range is (-1, 1)
-  float horizontal = (float)(2 * outu + 1) * sizefac - 1.0;
-  float vertical = (float)(2 * outv + 1) * sizefac - 1.0;
+  float horizontal = (float)(2 * outu + 1) * sizefac - 1.0f;
+  float vertical = (float)(2 * outv + 1) * sizefac - 1.0f;
 
   float4 vec = (float4)(horizontal, vertical, 1.0f, 0.0f);
 
@@ -52,10 +52,9 @@ __kernel void reproject_environment(__read_only image2d_t srcImage,
   float y = dot(vec, yTransforms[face]);
   float z = dot(vec, zTransforms[face]);
 
-  float4 dir = normalize((float4)(x, y, z, 0.0));
+  float4 dir = normalize((float4)(x, y, z, 0.0f));
 
   float2 uv = projectSphericalMap(normalize(dir));
   float4 color = read_imagef(srcImage, srcSampler, uv);
-  // the cube map faces are stacked vertically
   write_imagef(dstImage, (int4)(outu, outv, face, 0), color);
 }

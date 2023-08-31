@@ -18,6 +18,14 @@
 			"mode": "auto",
 			"program": "${workspaceFolder}/Project03/cmd/iblconv",
 			"args": ["convolve", "-c", "2", "brown_photostudio_01_4k.iblenv"]
+		},
+		{
+			"name": "brdflut",
+			"type": "go",
+			"request": "launch",
+			"mode": "auto",
+			"program": "${workspaceFolder}/Project03/cmd/brdflut",
+			"args": ["ibl_brdf_lut.f32"]
 		}
 	]
 }

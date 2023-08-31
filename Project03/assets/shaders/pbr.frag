@@ -84,15 +84,16 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 }
 
 
-vec3 sampleAmbient(vec3 N, vec3 V, vec3 R, vec3 F0, float roughness, vec3 albedo, float ao)
+vec3 sampleAmbient(vec3 N, vec3 V, vec3 R, vec3 F0, float roughness, float metallic, vec3 albedo, float ao)
 {
     vec3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
     vec3 kS = F;
     vec3 kD = 1.0 - kS;
+    kD *= 1.0 - metallic;
     vec3 irradiance = texture(u_environment_diffuse, N).rgb;
     vec3 diffuse    = irradiance * albedo;
 
-    const float MAX_REFLECTION_LOD = 5.0;
+    const float MAX_REFLECTION_LOD = 4.0;
     vec3 reflection = textureLod(u_environment_specualr, R, roughness * MAX_REFLECTION_LOD).rgb;   
     vec2 envBRDF  = texture(u_environment_brdf_lut, vec2(max(dot(N, V), 0.0), roughness)).rg;
     vec3 specular = reflection * (F * envBRDF.x + envBRDF.y);
@@ -115,8 +116,8 @@ void main()
     float ao        = orm.x;
 
     vec3 tN = texture(u_normal, in_uv).xyz * 2.0 - 1.0;
-    float br = roughness;
-    roughness = adjustRoughness(tN, roughness);
+    roughness = adjustRoughness(tN, roughness) - 0.0001;
+
     vec3 N = transformNormal(tN);
     vec3 V = normalize(u_camera_position - in_world_position);
     vec3 R = reflect(-V, N);
@@ -169,7 +170,7 @@ void main()
 
     // ambient lighting (note that the next IBL tutorial will replace
     // this ambient lighting with environment lighting).
-    vec3 ambient = sampleAmbient(N, V, R, F0, roughness, albedo, ao);
+    vec3 ambient = sampleAmbient(N, V, R, F0, roughness, metallic, albedo, ao);
 
     vec3 color = ambient + Lo;
 

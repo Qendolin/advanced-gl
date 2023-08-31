@@ -92,9 +92,9 @@ func (bw *BinaryWriter) WriteBytes(p []byte) (ok bool) {
 	_, err := bw.Dst.Write(p)
 	if err != nil {
 		bw.Err = err
-		ok = false
+		return false
 	}
-	return
+	return true
 }
 
 func (bw *BinaryWriter) Write(p []byte) (n int, err error) {
@@ -104,6 +104,12 @@ func (bw *BinaryWriter) Write(p []byte) (n int, err error) {
 func (bw *BinaryWriter) WriteUInt32(i uint32) (ok bool) {
 	buf := make([]byte, 4)
 	bw.Order.PutUint32(buf, i)
+	return bw.WriteBytes(buf)
+}
+
+func (bw *BinaryWriter) WriteUInt16(i uint16) (ok bool) {
+	buf := make([]byte, 2)
+	bw.Order.PutUint16(buf, i)
 	return bw.WriteBytes(buf)
 }
 

@@ -3,6 +3,7 @@ package ibl_test
 import (
 	"advanced-gl/Project03/ibl"
 	"advanced-gl/Project03/libgl"
+	"advanced-gl/Project03/libio"
 	"bytes"
 	"fmt"
 	"image"
@@ -205,4 +206,13 @@ func saveResultIbl(name string, hdri *ibl.IblEnv) {
 		png.Encode(file, rgba)
 	}
 
+}
+
+func saveResultFloatImage(name string, img *libio.FloatImage, gamma, scale float32) {
+	file, err := os.OpenFile(fmt.Sprintf("testout/%s.png", name), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0666)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	png.Encode(file, img.ToIntImage(gamma, scale).ToRGBA())
 }

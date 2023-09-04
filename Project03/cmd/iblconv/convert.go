@@ -22,10 +22,12 @@ func createConvertCommand() *command {
 
 	args := convertArgs{
 		commonArgs: commonArgs{
-			ext: ".iblenv",
+			ext:      ".iblenv",
+			compress: 2,
 		},
 		sizeImplArgs: sizeImplArgs{
-			impl: implCl,
+			impl:   implCl,
+			device: deviceGpu,
 			size: size{
 				unit:    unitPercent,
 				percent: 25,
@@ -64,7 +66,7 @@ func runConvert(args convertArgs, inputFiles []string) {
 
 	switch args.impl {
 	case implCl:
-		conv, err = ibl.NewClConverter(ibl.DeviceTypeGPU)
+		conv, err = ibl.NewClConverter(args.device.clDevice())
 		if err == nil {
 			defer conv.Release()
 			if !cargs.quiet {
@@ -125,10 +127,6 @@ func convertFile(args convertArgs, p string, ext string, conv ibl.Converter) err
 	defer close(outFile)
 
 	var dst io.Writer = outFile
-
-	if hdr.Rect.Dx() == 0 || hdr.Rect.Dy() == 0 {
-		return fmt.Errorf("image has zero size %dx%d", hdr.Rect.Dx(), hdr.Rect.Dy())
-	}
 
 	size := args.size.Calc(hdr.Rect.Dx())
 	if !cargs.quiet {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"advanced-gl/Project03/ibl"
 	"flag"
 	"fmt"
 	"io"
@@ -34,6 +35,40 @@ func (i *impl) Set(s string) error {
 		return fmt.Errorf("%s is not a valid implementation", s)
 	}
 	return nil
+}
+
+type device string
+
+const (
+	deviceGpu device = "gpu"
+	deviceCpu device = "cpu"
+)
+
+func (d *device) String() string {
+	return string(*d)
+}
+
+func (d *device) Set(s string) error {
+	switch device(s) {
+	case deviceGpu:
+		*d = deviceGpu
+	case deviceCpu:
+		*d = deviceCpu
+	default:
+		return fmt.Errorf("%s is not a valid device", s)
+	}
+	return nil
+}
+
+func (d *device) clDevice() ibl.DeviceType {
+	switch *d {
+	case deviceGpu:
+		return ibl.DeviceTypeGPU
+	case deviceCpu:
+		return ibl.DeviceTypeCPU
+	default:
+		return ibl.DeviceTypeGPU
+	}
 }
 
 type sizeUnit string
@@ -95,8 +130,9 @@ type commonArgs struct {
 }
 
 type sizeImplArgs struct {
-	size size
-	impl impl
+	size   size
+	impl   impl
+	device device
 }
 
 var cargs *commonArgs
@@ -138,6 +174,8 @@ func main() {
 	commands = append(commands, createConvolveCommand())
 	commands = append(commands, createUpdateCommand())
 	commands = append(commands, createPrefilterCommand())
+	commands = append(commands, createPreviewCommand())
+	commands = append(commands, createResizeCommand())
 
 	slices.SortFunc(commands, func(a, b *command) int {
 		return strings.Compare(a.Name, b.Name)
@@ -181,6 +219,7 @@ func registerSizeImplFlag(flags *flag.FlagSet, args *sizeImplArgs) {
 	flags.Var(&args.size, "size", "the cubemap face resolution, either % of the input width or absolute px")
 	flags.Var(&args.size, "s", "shorthand for size")
 	flags.Var(&args.impl, "impl", "the conversion implementation; opencl, opengl or software")
+	flags.Var(&args.device, "device", "the preferred opencl deivce; gpu or cpu")
 }
 
 func setCommonArgs(args *commonArgs) {

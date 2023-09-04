@@ -17,8 +17,9 @@ type updateArgs struct {
 func createUpdateCommand() *command {
 	args := updateArgs{
 		commonArgs: commonArgs{
-			ext:    ".iblenv",
-			suffix: "_updated",
+			ext:      ".iblenv",
+			suffix:   "_updated",
+			compress: 2,
 		},
 	}
 

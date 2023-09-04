@@ -75,6 +75,19 @@ func main() {
 	GlEnv = GetGlEnv()
 	Input = NewInputManager(ctx)
 
+	wireframe := false
+	lodBias := []float32{0.0, 0.0, -3.0}
+	reload := false
+	speed := float32(1.0)
+	abmientFactor := float32(1.0)
+	var (
+		selectedMaterial  string = "array_test"       // array_test, dirty_mirror
+		selectedMesh      string = "array_spheres_uv" // array_spheres_uv, plane
+		selectedHdriName  string
+		selectedHdriLevel int32
+		selectedHdri      *ibl.IblEnv
+	)
+
 	// FIXME: I can't use GlState here because it would be disabled by SetEnabled
 	gl.Enable(gl.TEXTURE_CUBE_MAP_SEAMLESS)
 	gl.Enable(gl.DEBUG_OUTPUT)
@@ -101,28 +114,26 @@ func main() {
 	lm.OnLoad(func(ctx *glfw.Window) {
 		pack = &DirPack{}
 		pack.AddIndexFile("assets/index.json")
-		// mesh, err := pack.LoadMesh("array_spheres")
-		mesh, err := pack.LoadMesh("plane")
+		mesh, err := pack.LoadMesh(selectedMesh)
 		check(err)
-		// material, err := pack.LoadMaterial("array_test")
-		material, err := pack.LoadMaterial("square_floor")
+		material, err := pack.LoadMaterial(selectedMaterial)
 		check(err)
 
 		batch = NewRenderBatch()
 		batch.Upload(mesh)
 		batch.AddMaterial(material)
 
-		for x := -2; x <= 2; x++ {
-			for z := -2; z <= 2; z++ {
-				batch.Add(mesh.Name, material.Name, InstanceAttributes{
-					ModelMatrix: mgl32.Translate3D(float32(x*2), 0, float32(z*2)),
-				})
-			}
-		}
+		// for x := -2; x <= 2; x++ {
+		// 	for z := -2; z <= 2; z++ {
+		// 		batch.Add(mesh.Name, material.Name, InstanceAttributes{
+		// 			ModelMatrix: mgl32.Translate3D(float32(x*2), 0, float32(z*2)),
+		// 		})
+		// 	}
+		// }
 
-		// batch.Add(mesh.Name, material.Name, InstanceAttributes{
-		// 	ModelMatrix: mgl32.Scale3D(0.1, 0.1, 0.1),
-		// })
+		batch.Add(mesh.Name, material.Name, InstanceAttributes{
+			ModelMatrix: mgl32.Scale3D(1.0, 1.0, 1.0),
+		})
 	})
 
 	viewportDims := [4]int32{}
@@ -250,17 +261,6 @@ func main() {
 
 	lm.Reload(ctx)
 
-	wireframe := false
-	lodBias := []float32{0.0, 0.0, -3.0}
-	reload := false
-	speed := float32(1.0)
-	var (
-		selectedMaterial  string
-		selectedHdriName  string
-		selectedHdriLevel int32
-		selectedHdri      *ibl.IblEnv
-	)
-
 	for !ctx.ShouldClose() {
 		glfw.PollEvents()
 		Input.Update(ctx)
@@ -288,12 +288,13 @@ func main() {
 			GlState.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 		}
 
-		batch.GenerateDrawCommands()
+		materials := batch.GenerateDrawCommands()
 		batch.CommandBuffer.Bind(gl.DRAW_INDIRECT_BUFFER)
 		batch.VertexArray.Bind()
 		pbrShader.Bind()
 		pbrShader.Get(gl.VERTEX_SHADER).SetUniform("u_view_projection_mat", cam.ProjectionMatrix.Mul4(cam.ViewMatrix))
 		pbrShader.Get(gl.FRAGMENT_SHADER).SetUniform("u_camera_position", cam.Position)
+		pbrShader.Get(gl.FRAGMENT_SHADER).SetUniform("u_ambient_factor", abmientFactor)
 
 		for i := 0; i < 4; i++ {
 			pbrShader.Get(gl.FRAGMENT_SHADER).SetUniformIndexed("u_light_positions", i, lightPositions[i])
@@ -310,7 +311,7 @@ func main() {
 		iblDiffuseCubemap.Bind(3)
 		iblSpecularCubemap.Bind(4)
 		iblBdrfLut.Bind(5)
-		for _, mat := range batch.Materials {
+		for _, mat := range materials {
 			mat.Material.Albedo.Bind(0)
 			mat.Material.Normal.Bind(1)
 			mat.Material.ORM.Bind(2)
@@ -385,9 +386,23 @@ func main() {
 				if im.Selectable(name) {
 					mat, err := pack.LoadMaterial(name)
 					check(err)
-					batch.Materials[0].Material.Delete()
-					batch.Materials[0].Material = mat
+					batch.AddMaterial(mat)
 					selectedMaterial = name
+				}
+			}
+
+			im.EndCombo()
+		}
+
+		if im.BeginCombo("Mesh", selectedMesh) {
+			meshes := maps.Keys(pack.MeshIndex)
+			slices.Sort(meshes)
+			for _, name := range meshes {
+				if im.Selectable(name) {
+					mesh, err := pack.LoadMesh(name)
+					check(err)
+					batch.Upload(mesh)
+					selectedMesh = name
 				}
 			}
 
@@ -419,6 +434,8 @@ func main() {
 				envCubemap.Load(0, sz, sz, 6, gl.RGB, selectedHdri.Level(int(selectedHdriLevel)))
 			}
 		}
+
+		im.SliderFloat("Ambient Factor", &abmientFactor, 0, 1)
 
 		im.End()
 

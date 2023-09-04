@@ -1,6 +1,6 @@
 {
 	"name": "array_test",
-	"albedo": "albedo_red.png",
+	"albedo": "albedo_white.png",
 	"normal": "normal_flat.png",
 	"orm": "orm_array.png"
 }

@@ -18,6 +18,7 @@ layout(binding = 5) uniform sampler2D u_environment_brdf_lut;
 uniform vec3 u_camera_position;
 uniform vec3[4] u_light_positions;
 uniform vec3[4] u_light_colors;
+uniform float u_ambient_factor;
 
 const float PI = 3.14159265359;
 
@@ -98,7 +99,7 @@ vec3 sampleAmbient(vec3 N, vec3 V, vec3 R, vec3 F0, float roughness, float metal
     vec2 envBRDF  = texture(u_environment_brdf_lut, vec2(max(dot(N, V), 0.0), roughness)).rg;
     vec3 specular = reflection * (F * envBRDF.x + envBRDF.y);
 
-    return (kD * diffuse + specular) * ao; 
+    return (kD * diffuse + specular) * ao * u_ambient_factor; 
 }
 
 vec3 reinhard2(vec3 x) {

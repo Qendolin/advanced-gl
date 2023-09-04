@@ -1,26 +1,3 @@
-constant sampler_t srcSampler =
-    CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_LINEAR;
-
-// These transforms specify the directions based on the cube face
-// They are based on
-// https://www.khronos.org/opengl/wiki_opengl/images/CubeMapAxes.png The order
-// is +X, -X, +Y, -Y, +Z, -Z Using the reference image the transforms are
-// (horizontal face axis, vertical face axis, face direction)
-// Using float4 because float3 were getting a 1 float padding on my gpu which
-// messed up the indexing
-__constant float4 xTransforms[6] = {
-    (float4)(0.0f, 0.0f, 1.0f, 0.0f), (float4)(0.0f, 0.0f, -1.0f, 0.0f),
-    (float4)(1.0f, 0.0f, 0.0f, 0.0f), (float4)(1.0f, 0.0f, 0.0f, 0.0f),
-    (float4)(1.0f, 0.0f, 0.0f, 0.0f), (float4)(-1.0f, 0.0f, 0.0f, 0.0f)};
-__constant float4 yTransforms[6] = {
-    (float4)(0.0f, -1.0f, 0.0f, 0.0f), (float4)(0.0f, -1.0f, 0.0f, 0.0f),
-    (float4)(0.0f, 0.0f, 1.0f, 0.0f),  (float4)(0.0f, 0.0f, -1.0f, 0.0f),
-    (float4)(0.0f, -1.0f, 0.0f, 0.0f), (float4)(0.0f, -1.0f, 0.0f, 0.0f)};
-__constant float4 zTransforms[6] = {
-    (float4)(-1.0f, 0.0f, 0.0f, 0.0f), (float4)(1.0f, 0.0f, 0.0f, 0.0f),
-    (float4)(0.0f, 1.0f, 0.0f, 0.0f),  (float4)(0.0f, -1.0f, 0.0f, 0.0f),
-    (float4)(0.0f, 0.0f, 1.0f, 0.0f),  (float4)(0.0f, 0.0f, -1.0f, 0.0f)};
-
 float2 projectSphericalMap(float4 dir) {
   float2 uv = (float2)(atan2pi(dir.z, dir.x) * 0.5f, asinpi(dir.y));
   uv += (float2)(0.5f, 0.5f);

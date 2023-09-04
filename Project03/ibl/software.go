@@ -2,6 +2,8 @@ package ibl
 
 import (
 	"advanced-gl/Project03/stbi"
+	"math"
+	"math/rand"
 
 	"github.com/chewxy/math32"
 )
@@ -342,6 +344,108 @@ func forEachCubeMapPixel(resolution int, cb func(face, pu, pv int, cx, cy, cz fl
 	}
 }
 
+// generates offset in a simple {samples} by {samples} grid pattern
+func generateSuperSamples(samples int) [][2]float32 {
+	if samples <= 1 {
+		return [][2]float32{{0, 0}}
+	}
+
+	offsets := make([][2]float32, samples*samples)
+	i := 0
+	for x := 0; x < samples; x++ {
+		for y := 0; y < samples; y++ {
+			offsets[i] = [2]float32{
+				(2*float32(x)+1)/float32(samples) - 1,
+				(2*float32(y)+1)/float32(samples) - 1,
+			}
+			i++
+		}
+	}
+	return offsets
+}
+
+func superSample(size int, samples [][2]float32, cb func(face, pu, pv int, cx, cy, cz float32, i int, weight float32)) func(face, pu, pv int, cx, cy, cz float32, i int) {
+	if len(samples) == 0 || (len(samples) == 1 && samples[0][0] == 0 && samples[0][1] == 0) {
+		return func(face, pu, pv int, cx, cy, cz float32, i int) {
+			cb(face, pu, pv, cx, cy, cz, i, 1.0)
+		}
+	}
+
+	weight := float32(1) / float32(len(samples))
+	sicefac := float32(1) / float32(size)
+
+	return func(face, pu, pv int, cx, cy, cz float32, i int) {
+		for _, s := range samples {
+			var sx, sy, sz float32 = cx, cy, cz
+			switch face {
+			case 0:
+				sz -= s[0] * sicefac
+				sy -= s[1] * sicefac
+			case 1:
+				sz += s[0] * sicefac
+				sy -= s[1] * sicefac
+			case 2:
+				sx += s[0] * sicefac
+				sz += s[1] * sicefac
+			case 3:
+				sx += s[0] * sicefac
+				sz -= s[1] * sicefac
+			case 4:
+				sx += s[0] * sicefac
+				sy -= s[1] * sicefac
+			case 5:
+				sx -= s[0] * sicefac
+				sy -= s[1] * sicefac
+			}
+			cb(face, pu, pv, sx, sy, sz, i, weight)
+		}
+	}
+}
+
+type swResizer struct {
+	samples [][2]float32
+}
+
+func NewSwResizer(samples int) (resizer Resizer) {
+	return &swResizer{
+		samples: generateSuperSamples(samples),
+	}
+}
+
+func (*swResizer) Release() {
+}
+
+func (resizer *swResizer) Resize(env *IblEnv, size int) (*IblEnv, error) {
+	result := make([]float32, calcCubeMapPixels(size, env.Levels)*3)
+
+	lvlsize := size
+	for lvl := 0; lvl < env.Levels; lvl++ {
+		lvlStart, lvlEnd := calcCubeMapOffset(size, lvl)
+		lvlResult := result[lvlStart*3 : lvlEnd*3]
+		resizeLevelSw(env, lvlsize, resizer.samples, lvlResult)
+		lvlsize /= 2
+	}
+
+	return NewIblEnv(result, size, env.Levels), nil
+}
+
+func resizeLevelSw(env *IblEnv, size int, samples [][2]float32, result []float32) {
+	forEachCubeMapPixel(size, superSample(size, samples, func(face, pu, pv int, cx, cy, cz float32, i int, weight float32) {
+		rx, ry, rz := cx, cy, cz
+		l := math32.Sqrt(rx*rx + ry*ry + rz*rz)
+		rx /= l
+		ry /= l
+		rz /= l
+
+		sface, su, sv := sampleCubeMap(rx, ry, rz)
+		sr, sg, sb := sampleBilinear(env.BaseSize, env.BaseSize, 3, env.Face(0, sface), su, sv)
+
+		result[i*3+0] += sr * weight
+		result[i*3+1] += sg * weight
+		result[i*3+2] += sb * weight
+	}))
+}
+
 type swSpecularConvolver struct {
 	samples [][]sample
 	levels  int
@@ -358,15 +462,18 @@ func (conv *swSpecularConvolver) Release() {
 }
 
 func generateHammersleySequence(count int) [][2]float32 {
-	samples := make([][2]float32, count)
+	sequence := make([][2]float32, count)
 	for i := 0; i < count; i++ {
 		su, sv := hammersley(uint32(i), uint32(count))
-		samples[i][0] = su
-		samples[i][1] = sv
+		sequence[i][0] = su
+		sequence[i][1] = sv
 	}
 
-	return samples
+	return sequence
 }
+
+// hammersley produces the best results imo
+var sampleSequenceImplementation func(count int) [][2]float32 = generateHammersleySequence
 
 func generateSpecularConvolutionSamples(count int, levels int) [][]sample {
 	// store all samples in contiguous memory
@@ -380,13 +487,13 @@ func generateSpecularConvolutionSamples(count int, levels int) [][]sample {
 	slicedSamples[0] = samples[0:1:1]
 	i := 1
 
-	hammersleySeq := generateHammersleySequence(count)
+	pseudoRandomSeq := sampleSequenceImplementation(count)
 
-	for l := 1; l < levels; l++ {
+	for lvl := 1; lvl < levels; lvl++ {
 		start := i
-		roughness := float32(l) / float32(levels-1)
+		roughness := float32(lvl) / float32(levels-1)
 		for si := 0; si < count; si++ {
-			hs := hammersleySeq[si]
+			hs := pseudoRandomSeq[si]
 			hx, hy, hz := importanceSampleGGX(hs[0], hs[1], roughness)
 			samples[i].x = hx
 			samples[i].y = hy
@@ -394,12 +501,13 @@ func generateSpecularConvolutionSamples(count int, levels int) [][]sample {
 			samples[i].weight = 1.0
 			i++
 		}
-		slicedSamples[l] = samples[start:i:i]
+		slicedSamples[lvl] = samples[start:i:i]
 	}
 
 	return slicedSamples
 }
 
+// Van der Corput
 func radicalInverseVdC(bits uint32) float32 {
 	bits = (bits << 16) | (bits >> 16)
 	bits = ((bits & 0x55555555) << 1) | ((bits & 0xAAAAAAAA) >> 1)
@@ -409,8 +517,39 @@ func radicalInverseVdC(bits uint32) float32 {
 	return float32(bits) * 2.3283064365386963e-10 // / 0x100000000
 }
 
+// hammersley set aka halton sequence
 func hammersley(i, N uint32) (x, y float32) {
 	return float32(i) / float32(N), radicalInverseVdC(i)
+}
+
+// https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+// note that 'roberts sequence' is not an official name
+func generateRobertsSequence(count int) [][2]float32 {
+	// generalization of the golden ration, solving `x^(d+1) = x+1` for d = 2
+	g := 1.3247179572447460
+
+	a1 := 1 / g
+	a2 := 1 / (g * g)
+
+	sequence := make([][2]float32, count)
+	for i := 0; i < count; i++ {
+		sequence[i][0] = float32(math.Mod(0.5+a1*float64(i+1), 1.0))
+		sequence[i][1] = float32(math.Mod(0.5+a2*float64(i+1), 1.0))
+	}
+
+	return sequence
+}
+
+func generateRandomSequence(count int) [][2]float32 {
+	rng := rand.New(rand.NewSource(0))
+
+	sequence := make([][2]float32, count)
+	for i := 0; i < count; i++ {
+		sequence[i][0] = rng.Float32()
+		sequence[i][1] = rng.Float32()
+	}
+
+	return sequence
 }
 
 func importanceSampleGGX(su, sv float32, roughness float32) (x, y, z float32) {
@@ -431,7 +570,9 @@ func importanceSampleGGX(su, sv float32, roughness float32) (x, y, z float32) {
 func (conv *swSpecularConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error) {
 	result := make([]float32, calcCubeMapPixels(size, conv.levels)*3)
 	lvlsize := size
-	for lvl := 0; lvl < conv.levels; lvl++ {
+	resizeLevelSw(env, lvlsize, generateSuperSamples(11), result)
+	lvlsize /= 2
+	for lvl := 1; lvl < conv.levels; lvl++ {
 		lvlStart, lvlEnd := calcCubeMapOffset(size, lvl)
 		lvlResult := result[lvlStart*3 : lvlEnd*3]
 		forEachCubeMapPixel(lvlsize, func(face, pu, pv int, cx, cy, cz float32, i int) {

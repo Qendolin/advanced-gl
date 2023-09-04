@@ -20,6 +20,12 @@ var openclConvolveSrc string
 //go:embed brdf.cl
 var openclBrdfSrc string
 
+//go:embed resize.cl
+var openclResizeSrc string
+
+//go:embed shared.cl
+var openclSharedSrc string
+
 type clCore struct {
 	context *cl.Context
 	queue   *cl.CommandQueue
@@ -43,6 +49,13 @@ type clSpecularConvolver struct {
 	samples      *cl.MemObject
 	samplesIndex [][2]int
 	levels       int
+	resizer      *clResizer
+}
+
+type clResizer struct {
+	clCore
+	kernel  *cl.Kernel
+	samples *cl.MemObject
 }
 
 type DeviceType = cl.DeviceType
@@ -53,7 +66,7 @@ const (
 	DeviceTypeAccelerator = DeviceType(cl.DeviceTypeAccelerator)
 )
 
-func newClCore(preferredDevice DeviceType, program string) (core *clCore, err error) {
+func newClCore(preferredDevice DeviceType, programs ...string) (core *clCore, err error) {
 	platforms, err := cl.GetPlatforms()
 	if err != nil {
 		return nil, err
@@ -98,7 +111,7 @@ func newClCore(preferredDevice DeviceType, program string) (core *clCore, err er
 		return nil, err
 	}
 
-	prog, err := ctx.CreateProgramWithSource([]string{program})
+	prog, err := ctx.CreateProgramWithSource(programs)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +128,7 @@ func newClCore(preferredDevice DeviceType, program string) (core *clCore, err er
 }
 
 func NewClConverter(preferredDevice DeviceType) (conv Converter, err error) {
-	core, err := newClCore(preferredDevice, openclConvertSrc)
+	core, err := newClCore(preferredDevice, openclSharedSrc, openclConvertSrc)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +223,7 @@ func (conv *clConverter) Release() {
 }
 
 func NewClDiffuseConvolver(preferredDevice DeviceType, quality int) (conv Convolver, err error) {
-	core, err := newClCore(preferredDevice, openclConvolveSrc)
+	core, err := newClCore(preferredDevice, openclSharedSrc, openclConvolveSrc)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +348,7 @@ func (conv *clDiffuseConvolver) Release() {
 }
 
 func NewClSpecularConvolver(preferredDevice DeviceType, quality, levels int) (conv Convolver, err error) {
-	core, err := newClCore(preferredDevice, openclConvolveSrc)
+	core, err := newClCore(preferredDevice, openclSharedSrc, openclConvolveSrc, openclResizeSrc)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +359,7 @@ func NewClSpecularConvolver(preferredDevice DeviceType, quality, levels int) (co
 
 	samples := generateSpecularConvolutionSamples(quality, levels)
 
-	sampleCount := 0
+	sampleCount := len(samples[0])
 	samplesIndex := make([][2]int, levels)
 	samplesIndex[0] = [2]int{0, len(samples[0])}
 	for lvl := 1; lvl < levels; lvl++ {
@@ -365,36 +378,23 @@ func NewClSpecularConvolver(preferredDevice DeviceType, quality, levels int) (co
 		return nil, err
 	}
 
+	resizer, err := newClResizer(core, 11)
+	if err != nil {
+		return nil, err
+	}
+
 	return &clSpecularConvolver{
 		clCore:       *core,
 		kernel:       kernel,
 		samples:      sampleBuf,
 		samplesIndex: samplesIndex,
 		levels:       levels,
+		resizer:      resizer,
 	}, nil
 }
 
 func (conv *clSpecularConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error) {
-	bpp := 4 * 4
-
-	rgbaData := make([]float32, env.BaseSize*env.BaseSize*6*4)
-	rgbData := env.All()
-	for i := 0; i < env.BaseSize*env.BaseSize*6; i++ {
-		rgbaData[i*4+0] = rgbData[i*3+0]
-		rgbaData[i*4+1] = rgbData[i*3+1]
-		rgbaData[i*4+2] = rgbData[i*3+2]
-		rgbaData[i*4+3] = 1.0
-	}
-
-	srcImage, err := conv.context.CreateImage(cl.MemReadOnly|cl.MemCopyHostPtr, cl.ImageFormat{
-		ChannelOrder:    cl.ChannelOrderRGBA,
-		ChannelDataType: cl.ChannelDataTypeFloat,
-	}, cl.ImageDescription{
-		Type:      cl.MemObjectTypeImage2DArray,
-		Width:     env.BaseSize,
-		Height:    env.BaseSize,
-		ArraySize: 6,
-	}, env.BaseSize*env.BaseSize*6*bpp, unsafe.Pointer(&rgbaData[0]))
+	srcImage, err := iblEnvToClBuffer(env, conv.context)
 	if err != nil {
 		return nil, err
 	}
@@ -405,10 +405,18 @@ func (conv *clSpecularConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error
 		return nil, err
 	}
 
+	err = conv.resizer.kernel.SetArgBuffer(0, srcImage)
+	if err != nil {
+		return nil, err
+	}
+
 	pixels := calcCubeMapPixels(size, conv.levels)
 	result := make([]float32, pixels*4)
 	lvlsize := size
-	for lvl := 0; lvl < conv.levels; lvl++ {
+	resizeLevelCl(conv.clCore, conv.resizer.kernel, result, lvlsize)
+	lvlsize /= 2
+
+	for lvl := 1; lvl < conv.levels; lvl++ {
 		dstImage, err := conv.context.CreateImage(cl.MemWriteOnly, cl.ImageFormat{
 			ChannelOrder:    cl.ChannelOrderRGBA,
 			ChannelDataType: cl.ChannelDataTypeFloat,
@@ -417,7 +425,7 @@ func (conv *clSpecularConvolver) Convolve(env *IblEnv, size int) (*IblEnv, error
 			Width:     lvlsize,
 			Height:    lvlsize,
 			ArraySize: 6,
-		}, lvlsize*lvlsize*6*bpp, nil)
+		}, lvlsize*lvlsize*6*4*4, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -483,10 +491,11 @@ func (conv *clSpecularConvolver) Release() {
 	conv.queue.Release()
 	conv.context.Release()
 	conv.samples.Release()
+	conv.resizer.Release()
 }
 
 func GenerateClBrdfLut(preferredDevice DeviceType, size, quality int) (*libio.FloatImage, error) {
-	core, err := newClCore(preferredDevice, openclBrdfSrc)
+	core, err := newClCore(preferredDevice, openclSharedSrc, openclBrdfSrc)
 	if err != nil {
 		return nil, err
 	}
@@ -560,10 +569,159 @@ func GenerateClBrdfLut(preferredDevice DeviceType, size, quality int) (*libio.Fl
 	return libio.NewFloatImage(result, 2, size, size), nil
 }
 
+func NewClResizer(preferredDevice DeviceType, supersample int) (resizer Resizer, err error) {
+	core, err := newClCore(preferredDevice, openclSharedSrc, openclResizeSrc)
+	if err != nil {
+		return nil, err
+	}
+
+	return newClResizer(core, supersample)
+}
+
+func newClResizer(core *clCore, supersample int) (resizer *clResizer, err error) {
+	kernel, err := core.program.CreateKernel("resize_environment")
+	if err != nil {
+		return nil, err
+	}
+
+	samples := generateSuperSamples(supersample)
+
+	sampleBuf, err := core.context.CreateBuffer(cl.MemReadOnly|cl.MemCopyHostPtr, len(samples)*int(unsafe.Sizeof(samples[0])), unsafe.Pointer(&samples[0]))
+	if err != nil {
+		return nil, err
+	}
+
+	err = kernel.SetArgBuffer(4, sampleBuf)
+	if err != nil {
+		return nil, err
+	}
+
+	err = kernel.SetArgInt32(5, int32(len(samples)))
+	if err != nil {
+		return nil, err
+	}
+
+	return &clResizer{
+		clCore:  *core,
+		kernel:  kernel,
+		samples: sampleBuf,
+	}, nil
+}
+
+func (resizer *clResizer) Resize(env *IblEnv, size int) (*IblEnv, error) {
+
+	srcImage, err := iblEnvToClBuffer(env, resizer.context)
+	if err != nil {
+		return nil, err
+	}
+	defer srcImage.Release()
+
+	err = resizer.kernel.SetArgBuffer(0, srcImage)
+	if err != nil {
+		return nil, err
+	}
+
+	lvlsize := size
+	result := make([]float32, calcCubeMapPixels(size, env.Levels)*4)
+	for lvl := 1; lvl < env.Levels; lvl++ {
+		lvlStart, lvlEnd := calcCubeMapOffset(size, lvl)
+		lvlResult := result[lvlStart*4 : lvlEnd*4]
+
+		err = resizeLevelCl(resizer.clCore, resizer.kernel, lvlResult, lvlsize)
+		if err != nil {
+			return nil, err
+		}
+		lvlsize /= 2
+	}
+
+	// compact RGBA to RGB
+	for i := 0; i < len(result)/4; i++ {
+		result[i*3+0] = result[i*4+0]
+		result[i*3+1] = result[i*4+1]
+		result[i*3+2] = result[i*4+2]
+	}
+	result = result[: size*size*6*3 : size*size*6*3]
+
+	iblEnv := NewIblEnv(result, size, 1)
+
+	return iblEnv, nil
+}
+
+func resizeLevelCl(core clCore, kernel *cl.Kernel, result []float32, size int) error {
+	dstImage, err := core.context.CreateImage(cl.MemWriteOnly, cl.ImageFormat{
+		ChannelOrder:    cl.ChannelOrderRGBA,
+		ChannelDataType: cl.ChannelDataTypeFloat,
+	}, cl.ImageDescription{
+		Type:      cl.MemObjectTypeImage2DArray,
+		Width:     size,
+		Height:    size,
+		ArraySize: 6,
+	}, size*size*6*4*4, nil)
+	if err != nil {
+		return err
+	}
+	defer dstImage.Release()
+
+	err = kernel.SetArgBuffer(1, dstImage)
+	if err != nil {
+		return err
+	}
+	err = kernel.SetArgInt32(2, int32(size))
+	if err != nil {
+		return err
+	}
+	err = kernel.SetArgFloat32(3, 1.0/float32(size))
+	if err != nil {
+		return err
+	}
+
+	localWorkSize := []int{32, 32, 1}
+	globalWorkSize := []int{roundUpKernelSize(localWorkSize[0], size), roundUpKernelSize(localWorkSize[1], size), 6}
+
+	_, err = core.queue.EnqueueNDRangeKernel(kernel, []int{0, 0, 0}, globalWorkSize, localWorkSize, nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = core.queue.EnqueueReadImage(dstImage, true, [3]int{}, [3]int{size, size, 6}, 0, 0, unsafe.Pointer(&result[0]), nil)
+	return err
+}
+
+func (resizer *clResizer) Release() {
+	resizer.kernel.Release()
+	resizer.program.Release()
+	resizer.queue.Release()
+	resizer.context.Release()
+	resizer.samples.Release()
+}
+
 func roundUpKernelSize(groupSize, globalSize int) int {
 	r := globalSize % groupSize
 	if r == 0 {
 		return globalSize
 	}
 	return globalSize + groupSize - r
+}
+
+func iblEnvToClBuffer(env *IblEnv, ctx *cl.Context) (*cl.MemObject, error) {
+	bpp := 4 * 4
+
+	rgbaData := make([]float32, env.BaseSize*env.BaseSize*6*4)
+	rgbData := env.All()
+	for i := 0; i < env.BaseSize*env.BaseSize*6; i++ {
+		rgbaData[i*4+0] = rgbData[i*3+0]
+		rgbaData[i*4+1] = rgbData[i*3+1]
+		rgbaData[i*4+2] = rgbData[i*3+2]
+		rgbaData[i*4+3] = 1.0
+	}
+
+	return ctx.CreateImage(cl.MemReadOnly|cl.MemCopyHostPtr, cl.ImageFormat{
+		ChannelOrder:    cl.ChannelOrderRGBA,
+		ChannelDataType: cl.ChannelDataTypeFloat,
+	}, cl.ImageDescription{
+		Type:      cl.MemObjectTypeImage2DArray,
+		Width:     env.BaseSize,
+		Height:    env.BaseSize,
+		ArraySize: 6,
+	}, env.BaseSize*env.BaseSize*6*bpp, unsafe.Pointer(&rgbaData[0]))
 }

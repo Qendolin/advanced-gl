@@ -22,8 +22,9 @@ type prefilterArgs struct {
 func createPrefilterCommand() *command {
 	args := prefilterArgs{
 		commonArgs: commonArgs{
-			ext:    ".iblenv",
-			suffix: "_specular",
+			ext:      ".iblenv",
+			suffix:   "_specular",
+			compress: 2,
 		},
 		sizeImplArgs: sizeImplArgs{
 			impl: implCl,
@@ -31,8 +32,9 @@ func createPrefilterCommand() *command {
 				unit:  unitPixel,
 				pixel: 128,
 			},
+			device: deviceGpu,
 		},
-		samples: 4096,
+		samples: 1048576,
 		levels:  5,
 	}
 
@@ -69,7 +71,7 @@ func runPrefilter(args prefilterArgs, inputFiles []string) {
 
 	switch args.impl {
 	case implCl:
-		conv, err = ibl.NewClSpecularConvolver(ibl.DeviceTypeGPU, args.samples, args.levels)
+		conv, err = ibl.NewClSpecularConvolver(args.device.clDevice(), args.samples, args.levels)
 		if err == nil {
 			defer conv.Release()
 			if !cargs.quiet {
@@ -127,10 +129,6 @@ func prefilterFile(args prefilterArgs, p string, ext string, conv ibl.Convolver)
 	defer close(outFile)
 
 	var dst io.Writer = outFile
-
-	if src.BaseSize == 0 {
-		return fmt.Errorf("image has zero size")
-	}
 
 	size := args.size.Calc(src.BaseSize)
 	if !cargs.quiet {

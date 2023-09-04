@@ -17,7 +17,7 @@
 			"request": "launch",
 			"mode": "auto",
 			"program": "${workspaceFolder}/Project03/cmd/iblconv",
-			"args": ["convolve", "-c", "2", "brown_photostudio_01_4k.iblenv"]
+			"args": ["specular", "-samples", "1048576", "studio_small.iblenv"]
 		},
 		{
 			"name": "brdflut",

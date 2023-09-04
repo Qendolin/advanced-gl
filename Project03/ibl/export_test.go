@@ -4,3 +4,8 @@ package ibl
 
 var EncodeRgbeChunk = encodeRgbeChunk
 var DecodeRgbeChunk = decodeRgbeChunk
+
+var SampleSequenceImplementation = &sampleSequenceImplementation
+var HammersleySequence = generateHammersleySequence
+var RobertsSequence = generateRobertsSequence
+var RandomSequence = generateRandomSequence

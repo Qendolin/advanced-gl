@@ -21,8 +21,9 @@ type convolveArgs struct {
 func createConvolveCommand() *command {
 	args := convolveArgs{
 		commonArgs: commonArgs{
-			ext:    ".iblenv",
-			suffix: "_diffuse",
+			ext:      ".iblenv",
+			suffix:   "_diffuse",
+			compress: 2,
 		},
 		sizeImplArgs: sizeImplArgs{
 			impl: implCl,
@@ -30,6 +31,7 @@ func createConvolveCommand() *command {
 				unit:  unitPixel,
 				pixel: 32,
 			},
+			device: deviceGpu,
 		},
 		samples: 128,
 	}
@@ -66,7 +68,7 @@ func runConvolve(args convolveArgs, inputFiles []string) {
 
 	switch args.impl {
 	case implCl:
-		conv, err = ibl.NewClDiffuseConvolver(ibl.DeviceTypeGPU, args.samples)
+		conv, err = ibl.NewClDiffuseConvolver(args.device.clDevice(), args.samples)
 		if err == nil {
 			defer conv.Release()
 			if !cargs.quiet {

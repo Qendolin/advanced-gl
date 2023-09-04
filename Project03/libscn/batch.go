@@ -16,8 +16,8 @@ type RenderBatch struct {
 	ElementBuffer      libgl.UnboundBuffer
 	CommandBuffer      libgl.UnboundBuffer
 	TotatCommandRange  [2]int
-	Materials          []MaterialSlice
-	MaterialIndex      map[string]int
+	materials          []MaterialSlice
+	materialIndex      map[string]int
 	meshLocations      []MeshLocation
 	meshIndex          map[string]int
 	attributesPosition int
@@ -91,8 +91,8 @@ func NewRenderBatch() *RenderBatch {
 		ElementBuffer:    elements,
 		AttributesBuffer: attributes,
 		VertexArray:      vao,
-		Materials:        []MaterialSlice{},
-		MaterialIndex:    map[string]int{},
+		materials:        []MaterialSlice{},
+		materialIndex:    map[string]int{},
 		meshLocations:    []MeshLocation{},
 		meshIndex:        map[string]int{},
 		CommandBuffer:    commands,
@@ -100,6 +100,10 @@ func NewRenderBatch() *RenderBatch {
 }
 
 func (batch *RenderBatch) Upload(mesh *Mesh) {
+	if _, ok := batch.meshIndex[mesh.Name]; ok {
+		return
+	}
+
 	verticesSize := len(mesh.Vertices) * VertexSize
 	if batch.VertexBuffer.Grow(batch.vertexPosition + verticesSize) {
 		batch.VertexArray.BindBuffer(0, batch.VertexBuffer, 0, verticesSize)
@@ -124,21 +128,24 @@ func (batch *RenderBatch) Upload(mesh *Mesh) {
 }
 
 func (batch *RenderBatch) AddMaterial(material *Material) {
+	if _, ok := batch.materialIndex[material.Name]; ok {
+		return
+	}
 	slice := MaterialSlice{
 		Material:      material,
 		ElementOffset: 0,
 		ElementCount:  0,
 		instances:     []MeshInstance{},
 	}
-	batch.Materials = append(batch.Materials, slice)
-	batch.MaterialIndex[material.Name] = len(batch.Materials) - 1
+	batch.materials = append(batch.materials, slice)
+	batch.materialIndex[material.Name] = len(batch.materials) - 1
 }
 
 func (batch *RenderBatch) Add(mesh, material string, attributes InstanceAttributes) {
 	if _, ok := batch.meshIndex[mesh]; !ok {
 		log.Panicf("Mesh %q is not contained in this batch", mesh)
 	}
-	if _, ok := batch.MaterialIndex[material]; !ok {
+	if _, ok := batch.materialIndex[material]; !ok {
 		log.Printf("Material %q is not contained in this batch\n", material)
 	}
 	vbo := batch.AttributesBuffer
@@ -156,17 +163,17 @@ func (batch *RenderBatch) Add(mesh, material string, attributes InstanceAttribut
 }
 
 func (batch *RenderBatch) ByMaterial(material string) *MaterialSlice {
-	return &batch.Materials[batch.MaterialIndex[material]]
+	return &batch.materials[batch.materialIndex[material]]
 }
 
-func (batch *RenderBatch) GenerateDrawCommands() {
+func (batch *RenderBatch) GenerateDrawCommands() []MaterialSlice {
 	if batch.commands == nil {
 		batch.commands = []DrawElementsIndirectCommand{}
 	}
 	batch.commands = batch.commands[:0]
 
-	for i := range batch.Materials {
-		slice := &batch.Materials[i]
+	for i := range batch.materials {
+		slice := &batch.materials[i]
 		slice.ElementOffset = len(batch.commands) * DrawCommandSize
 		slice.ElementCount = len(slice.instances)
 		for _, instance := range slice.instances {
@@ -185,4 +192,6 @@ func (batch *RenderBatch) GenerateDrawCommands() {
 	batch.CommandBuffer.Grow(len(batch.commands) * DrawCommandSize)
 	batch.CommandBuffer.Write(0, batch.commands)
 	batch.TotatCommandRange = [2]int{0, len(batch.commands)}
+
+	return batch.materials
 }

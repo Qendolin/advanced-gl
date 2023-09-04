@@ -41,15 +41,17 @@ func (w *mockWriter) Write(b []byte) (int, error) {
 }
 
 var testdata struct {
-	rgbeEnc      []byte
-	byteBuffer   []byte
-	writer       bufferWriter
-	hdr          *stbi.RgbaHdr
-	iblEnv       *ibl.IblEnv
-	hdrEncRaw    []byte
-	iblLevelNone []byte
-	iblLevelFast []byte
-	iblLevel1    []byte
+	rgbeEnc                         []byte
+	byteBuffer                      []byte
+	writer                          bufferWriter
+	hdr                             *stbi.RgbaHdr
+	iblEnv                          *ibl.IblEnv
+	hdrEncRaw                       []byte
+	iblLevelNone                    []byte
+	iblLevelFast                    []byte
+	iblLevel1                       []byte
+	iblStudioSmall                  *ibl.IblEnv
+	iblStudioSmallSpecularReference *ibl.IblEnv
 }
 
 func TestMain(m *testing.M) {
@@ -121,6 +123,20 @@ func TestMain(m *testing.M) {
 	iblFile, err = os.Open("./testdata/cubemap_testing_full_low_compressed.iblenv")
 	check(err)
 	testdata.iblLevel1, err = io.ReadAll(iblFile)
+	check(err)
+
+	iblFile, err = os.Open("./testdata/studio_small.iblenv")
+	check(err)
+	iblStudioSmallData, err := io.ReadAll(iblFile)
+	check(err)
+	testdata.iblStudioSmall, err = ibl.DecodeOldIblEnv(bytes.NewBuffer(iblStudioSmallData))
+	check(err)
+
+	iblFile, err = os.Open("./testdata/studio_small_specular_reference.iblenv")
+	check(err)
+	iblStudioSmallSpecularReferenceData, err := io.ReadAll(iblFile)
+	check(err)
+	testdata.iblStudioSmallSpecularReference, err = ibl.DecodeOldIblEnv(bytes.NewBuffer(iblStudioSmallSpecularReferenceData))
 	check(err)
 
 	onMain = make(chan func())

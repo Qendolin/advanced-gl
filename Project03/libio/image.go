@@ -63,10 +63,10 @@ func (img *IntImage) Bytes() int {
 	return img.Width * img.Height * img.Channels
 }
 
-func (img *IntImage) ToChannels(nr int, defaults ...uint8) *IntImage {
-	dst := toChannels(img.Channels, nr, img.Count(), img.Pix, defaults...)
+func (img *IntImage) ToChannels(count int, defaults ...uint8) *IntImage {
+	dst := toChannels(img.Channels, count, img.Count(), img.Pix, defaults...)
 
-	return NewIntImage(dst, nr, img.Width, img.Height)
+	return NewIntImage(dst, count, img.Width, img.Height)
 }
 
 func toChannels[P ~[]E, E any](srcCh, dstCh int, count int, pix P, defaults ...E) P {
@@ -96,6 +96,39 @@ func toChannels[P ~[]E, E any](srcCh, dstCh int, count int, pix P, defaults ...E
 		for i := 0; i < count; i++ {
 			for c := 0; c < dstCh; c++ {
 				dst[i*dstCh+c] = pix[i*srcCh+c]
+			}
+		}
+	}
+
+	return dst
+}
+
+func (img *IntImage) Shuffle(order []int, defaults ...uint8) *IntImage {
+	if len(order) > 4 {
+		order = order[:4]
+	}
+	dst := shuffle(order, img.Channels, img.Count(), img.Pix, defaults...)
+
+	return NewIntImage(dst, len(order), img.Width, img.Height)
+}
+
+func shuffle[P ~[]E, E any](order []int, srcCh int, count int, pix P, defaults ...E) P {
+	dstCh := len(order)
+	dst := make([]E, count*dstCh)
+
+	if len(defaults) < 8 {
+		missing := 8 - len(defaults)
+		defaults = append(defaults, make([]E, missing)...)
+	}
+
+	for dch, sch := range order {
+		if sch >= srcCh {
+			for i := 0; i < count; i++ {
+				dst[i*dstCh+dch] = defaults[sch]
+			}
+		} else {
+			for i := 0; i < count; i++ {
+				dst[i*dstCh+dch] = pix[i*srcCh+sch]
 			}
 		}
 	}
@@ -159,20 +192,58 @@ func (img *FloatImage) Bytes() int {
 	return img.Width * img.Height * img.Channels * 4
 }
 
-func (img *FloatImage) ToChannels(nr int, defaults ...float32) *FloatImage {
-	dst := toChannels(img.Channels, nr, img.Count(), img.Pix, defaults...)
+func (img *FloatImage) ToChannels(count int, defaults ...float32) *FloatImage {
+	dst := toChannels(img.Channels, count, img.Count(), img.Pix, defaults...)
 
-	return NewFloatImage(dst, nr, img.Width, img.Height)
+	return NewFloatImage(dst, count, img.Width, img.Height)
 }
 
-func (img *FloatImage) ToIntImage(gamma, scale float32) *IntImage {
+func (img *FloatImage) Shuffle(order []int, defaults ...float32) *FloatImage {
+	if len(order) > 4 {
+		order = order[:4]
+	}
+	dst := shuffle(order, img.Channels, img.Count(), img.Pix, defaults...)
+
+	return NewFloatImage(dst, len(order), img.Width, img.Height)
+}
+
+func (img *FloatImage) Copy() *FloatImage {
+	pix := make([]float32, len(img.Pix))
+	copy(pix, img.Pix)
+	return NewFloatImage(pix, img.Channels, img.Width, img.Height)
+}
+
+func (img *FloatImage) ToIntImage() *IntImage {
 	pix := make([]uint8, len(img.Pix))
 
 	for i := 0; i < len(img.Pix); i++ {
-		pix[i] = uint8(tonemap(img.Pix[i], 1.0/gamma, scale) * 0xff)
+		pix[i] = uint8(math32.Min(math32.Max(0.0, img.Pix[i]), 1.0) * 0xff)
 	}
 
 	return NewIntImage(pix, img.Channels, img.Width, img.Height)
+}
+
+func (img *FloatImage) Tonemap(gamma, scale float32) {
+	for i := 0; i < len(img.Pix); i++ {
+		img.Pix[i] = tonemap(img.Pix[i], 1.0/gamma, scale)
+	}
+}
+
+// Normalizes all pixel values to be from 0 to 1
+func (img *FloatImage) Normalize() {
+	var min, max float32 = math32.Inf(1), math32.Inf(-1)
+	for i := 0; i < len(img.Pix); i++ {
+		if img.Pix[i] > max {
+			max = img.Pix[i]
+		}
+		if img.Pix[i] < min {
+			min = img.Pix[i]
+		}
+	}
+	diff := max - min
+	for i := 0; i < len(img.Pix); i++ {
+		img.Pix[i] = (img.Pix[i] - min) / diff
+	}
 }
 
 func tonemap(value, gamma, scale float32) float32 {

@@ -14,10 +14,11 @@ import (
 
 type previewArgs struct {
 	commonArgs
-	gamma    float64
-	scale    float64
-	device   device
-	reinhard bool
+	gamma     float64
+	scale     float64
+	device    device
+	reinhard  bool
+	normalize bool
 }
 
 func createPreviewCommand() *command {
@@ -26,10 +27,11 @@ func createPreviewCommand() *command {
 		commonArgs: commonArgs{
 			ext: ".png",
 		},
-		gamma:    2.2,
-		scale:    1.0,
-		device:   deviceGpu,
-		reinhard: false,
+		gamma:     2.2,
+		scale:     1.0,
+		device:    deviceGpu,
+		reinhard:  false,
+		normalize: true,
 	}
 
 	flags := flag.NewFlagSet("preview", flag.ExitOnError)
@@ -40,6 +42,7 @@ func createPreviewCommand() *command {
 	flags.Float64Var(&args.scale, "scale", args.scale, "brightness scale factor")
 	flags.Var(&args.device, "device", "the preferred opencl deivce; gpu or cpu")
 	flags.BoolVar(&args.reinhard, "reinhard", args.reinhard, "apply reinhard tonemapping")
+	flags.BoolVar(&args.normalize, "normalize", args.normalize, "normalize pixel values to be from 0 to 1")
 
 	return &command{
 		Name: "preview",
@@ -110,7 +113,11 @@ func previewFile(args previewArgs, p string, ext string) error {
 				fimg.Pix[i*3+2] = fimg.Pix[i*3+2] / (1 + fimg.Pix[i*3+2])
 			}
 		}
-		rgba := fimg.ToIntImage(float32(args.gamma), float32(args.scale)).ToRGBA()
+		fimg.Tonemap(float32(args.gamma), float32(args.scale))
+		if args.normalize {
+			fimg.Normalize()
+		}
+		rgba := fimg.ToIntImage().ToRGBA()
 
 		if !cargs.quiet {
 			fmt.Printf("Writing %q ...\n", filepath.ToSlash(filepath.Clean(outFilename)))

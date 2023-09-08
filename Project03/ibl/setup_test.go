@@ -230,5 +230,6 @@ func saveResultFloatImage(name string, img *libio.FloatImage, gamma, scale float
 		return
 	}
 	defer file.Close()
-	png.Encode(file, img.ToIntImage(gamma, scale).ToRGBA())
+	img.Tonemap(gamma, scale)
+	png.Encode(file, img.ToIntImage().ToRGBA())
 }

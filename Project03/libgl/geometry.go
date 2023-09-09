@@ -16,6 +16,7 @@ type buffer struct {
 }
 
 type UnboundBuffer interface {
+	LabeledGlObject
 	Id() uint32
 	Allocate(data any, flags int)
 	AllocateMutable(data any, usage int)
@@ -44,6 +45,10 @@ func NewBuffer() UnboundBuffer {
 
 func (vbo *buffer) Id() uint32 {
 	return vbo.glId
+}
+
+func (vbo *buffer) SetDebugLabel(label string) {
+	setObjectLabel(gl.BUFFER, vbo.glId, label)
 }
 
 func (vbo *buffer) Bind(target uint32) BoundBuffer {
@@ -211,6 +216,7 @@ type vertexArray struct {
 }
 
 type UnboundVertexArray interface {
+	LabeledGlObject
 	Layout(bufferIndex int, attributeIndex int, size int, dataType int, normalized bool, offset int)
 	LayoutI(bufferIndex int, attributeIndex int, size int, dataType int, offset int)
 	BindBuffer(bufferIndex int, vbo UnboundBuffer, offset int, stride int)
@@ -242,6 +248,10 @@ func (vao *vertexArray) Bind() BoundVertexArray {
 
 func (vao *vertexArray) Id() uint32 {
 	return vao.glId
+}
+
+func (vao *vertexArray) SetDebugLabel(label string) {
+	setObjectLabel(gl.VERTEX_ARRAY, vao.glId, label)
 }
 
 func (vao *vertexArray) Layout(bufferIndex int, attributeIndex int, size int, dataType int, normalized bool, offset int) {

@@ -15,6 +15,7 @@ type framebuffer struct {
 }
 
 type UnboundFramebuffer interface {
+	LabeledGlObject
 	Id() uint32
 	// target must be GL_DRAW_FRAMEBUFFER, GL_READ_FRAMEBUFFER or GL_FRAMEBUFFER
 	Bind(target uint32) BoundFramebuffer
@@ -49,6 +50,10 @@ func NewFramebuffer() UnboundFramebuffer {
 
 func (fb *framebuffer) Id() uint32 {
 	return fb.glId
+}
+
+func (fb *framebuffer) SetDebugLabel(label string) {
+	setObjectLabel(gl.FRAMEBUFFER, fb.glId, label)
 }
 
 func (fb *framebuffer) BindTargets(indices ...int) {
@@ -162,6 +167,7 @@ type renderbuffer struct {
 }
 
 type UnboundRenderbuffer interface {
+	LabeledGlObject
 	Id() uint32
 	Bind() BoundRenderbuffer
 	Allocate(internalFormat uint32, width, height int)
@@ -182,6 +188,10 @@ func NewRenderbuffer() UnboundRenderbuffer {
 
 func (rb *renderbuffer) Id() uint32 {
 	return rb.glId
+}
+
+func (rb *renderbuffer) SetDebugLabel(label string) {
+	setObjectLabel(gl.RENDERBUFFER, rb.glId, label)
 }
 
 func (rb *renderbuffer) Bind() BoundRenderbuffer {

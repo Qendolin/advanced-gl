@@ -234,6 +234,7 @@ func (pack *DirPack) LoadShaderPipeline(name string) (libgl.UnboundShaderPipelin
 	}
 
 	pipeline := libgl.NewPipeline()
+	pipeline.SetDebugLabel(name)
 	pipeline.Attach(vertexSh, gl.VERTEX_SHADER_BIT)
 	pipeline.Attach(fragmentSh, gl.FRAGMENT_SHADER_BIT)
 
@@ -252,7 +253,9 @@ func (pack *DirPack) LoadShader(filename string, stage int) (libgl.ShaderProgram
 		return nil, fmt.Errorf("could not read shader file %q: %w", filename, err)
 	}
 
-	return libgl.NewShader(string(src), stage), nil
+	sh := libgl.NewShader(string(src), stage)
+	sh.SetDebugLabel(path.Base(filename))
+	return sh, nil
 }
 
 type Material struct {
@@ -311,16 +314,19 @@ func (pack *DirPack) LoadMaterial(name string) (*Material, error) {
 	}
 
 	albeoTexture := libgl.NewTexture(gl.TEXTURE_2D)
+	albeoTexture.SetDebugLabel(materialDesc.Albedo)
 	albeoTexture.Allocate(0, gl.RGBA8, albedo.Width, albedo.Height, 0)
 	albeoTexture.Load(0, albedo.Width, albedo.Height, 0, gl.RGBA, albedo.Pix)
 	albeoTexture.GenerateMipmap()
 
 	normalTexture := libgl.NewTexture(gl.TEXTURE_2D)
+	normalTexture.SetDebugLabel(materialDesc.Normal)
 	normalTexture.Allocate(0, gl.RGB8, normal.Width, normal.Height, 0)
 	normalTexture.Load(0, normal.Width, normal.Height, 0, gl.RGBA, normal.Pix)
 	normalTexture.GenerateMipmap()
 
 	ormTexture := libgl.NewTexture(gl.TEXTURE_2D)
+	ormTexture.SetDebugLabel(materialDesc.ORM)
 	ormTexture.Allocate(0, gl.RGB8, orm.Width, orm.Height, 0)
 	ormTexture.Load(0, orm.Width, orm.Height, 0, gl.RGBA, orm.Pix)
 	ormTexture.GenerateMipmap()

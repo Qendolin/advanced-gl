@@ -149,12 +149,15 @@ func main() {
 	viewportHeight := int(viewportDims[3])
 
 	hdrFbo := NewFramebuffer()
+	hdrFbo.SetDebugLabel("hdr_fbo")
 	hdrColorAttachment := NewTexture(gl.TEXTURE_2D)
+	hdrColorAttachment.SetDebugLabel("hdr_fbo")
 	hdrColorAttachment.Allocate(1, gl.R11F_G11F_B10F, viewportWidth, viewportHeight, 0)
 	hdrFbo.AttachTexture(0, hdrColorAttachment)
 	hdrFbo.BindTargets(0)
 
 	hdrDepthAttachment := NewTexture(gl.TEXTURE_2D)
+	hdrDepthAttachment.SetDebugLabel("hdr_fbo")
 	hdrDepthAttachment.Allocate(1, gl.DEPTH24_STENCIL8, viewportWidth, viewportHeight, 0)
 	hdrFbo.AttachTexture(gl.DEPTH_ATTACHMENT, hdrDepthAttachment)
 	check(hdrFbo.Check(gl.DRAW_FRAMEBUFFER))
@@ -205,8 +208,10 @@ func main() {
 	})
 
 	skyBoxVbo := NewBuffer()
+	skyBoxVbo.SetDebugLabel("sky_box")
 	skyBoxVbo.Allocate(ibl.NewUnitCube(), 0)
 	skyBox := NewVertexArray()
+	skyBox.SetDebugLabel("sky_box")
 	skyBox.Layout(0, 0, 3, gl.FLOAT, false, 0)
 	skyBox.BindBuffer(0, skyBoxVbo, 0, 3*4)
 
@@ -219,14 +224,17 @@ func main() {
 		check(err)
 
 		envCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
+		envCubemap.SetDebugLabel("environment")
 		envCubemap.Allocate(1, gl.RGB16F, hdri.BaseSize, hdri.BaseSize, 0)
 		envCubemap.Load(0, hdri.BaseSize, hdri.BaseSize, 6, gl.RGB, hdri.All())
 
 		iblDiffuseCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
+		iblDiffuseCubemap.SetDebugLabel("ibl_diffuse")
 		iblDiffuseCubemap.Allocate(1, gl.RGB16F, hdriIrradiance.BaseSize, hdriIrradiance.BaseSize, 0)
 		iblDiffuseCubemap.Load(0, hdriIrradiance.BaseSize, hdriIrradiance.BaseSize, 6, gl.RGB, hdriIrradiance.All())
 
 		iblSpecularCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
+		iblSpecularCubemap.SetDebugLabel("ibl_specular")
 		iblSpecularCubemap.Allocate(hdriReflection.Levels, gl.RGB16F, hdriReflection.BaseSize, hdriReflection.BaseSize, 0)
 		for i := 0; i < hdriReflection.Levels; i++ {
 			iblSpecularCubemap.Load(i, hdriReflection.Size(i), hdriReflection.Size(i), 6, gl.RGB, hdriReflection.Level(i))
@@ -235,6 +243,7 @@ func main() {
 		lut, err := pack.LoadTextureFloat("ibl_brdf_lut")
 		check(err)
 		iblBdrfLut = NewTexture(gl.TEXTURE_2D)
+		iblBdrfLut.SetDebugLabel("ibl_lut")
 		iblBdrfLut.Allocate(1, gl.RG32F, lut.Width, lut.Height, 0)
 		iblBdrfLut.Load(0, lut.Width, lut.Height, 0, gl.RG, lut.Pix)
 	})
@@ -249,6 +258,7 @@ func main() {
 	cam.UpdateProjectionMatrix()
 
 	cubemapSampler := NewSampler()
+	cubemapSampler.SetDebugLabel("cubemap")
 	cubemapSampler.WrapMode(gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE)
 	cubemapSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
 
@@ -257,20 +267,24 @@ func main() {
 	framebufferSampler.FilterMode(gl.NEAREST, gl.NEAREST)
 
 	lutSampler := NewSampler()
+	lutSampler.SetDebugLabel("lut")
 	lutSampler.WrapMode(gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE)
 	lutSampler.FilterMode(gl.LINEAR, gl.LINEAR)
 
 	texAlbedoSampler := NewSampler()
+	texAlbedoSampler.SetDebugLabel("albedo")
 	texAlbedoSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
 	texAlbedoSampler.WrapMode(gl.REPEAT, gl.REPEAT, 0)
 	texAlbedoSampler.AnisotropicFilter(8.0)
 
 	texNormalSampler := NewSampler()
+	texNormalSampler.SetDebugLabel("normal")
 	texNormalSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
 	texNormalSampler.WrapMode(gl.REPEAT, gl.REPEAT, 0)
 	texNormalSampler.AnisotropicFilter(8.0)
 
 	texOrmSampler := NewSampler()
+	texOrmSampler.SetDebugLabel("orm")
 	texOrmSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
 	texOrmSampler.WrapMode(gl.REPEAT, gl.REPEAT, 0)
 	texOrmSampler.LodBias(-3.0)

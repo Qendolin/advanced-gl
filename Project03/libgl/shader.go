@@ -12,7 +12,7 @@ import (
 	"github.com/go-gl/mathgl/mgl64"
 )
 
-var shaderMetaPattern = regexp.MustCompile(`(?m)^\/\/meta:(\w+)(.+)$`)
+// var shaderMetaPattern = regexp.MustCompile(`(?m)^\/\/meta:(\w+)(.+)$`)
 var shaderDefinePattern = regexp.MustCompile(`(?m)^\s*(\/\/)?\s*#define ([\w\d]+) ?(.*)$`)
 var shaderVersionPattern = regexp.MustCompile(`(?m)^\s*#version.+$`)
 
@@ -27,6 +27,7 @@ type shaderPipeline struct {
 }
 
 type UnboundShaderPipeline interface {
+	LabeledGlObject
 	Bind() BoundShaderPipeline
 	Attach(program ShaderProgram, stages int)
 	ReAttach(stages int)
@@ -48,6 +49,10 @@ func NewPipeline() UnboundShaderPipeline {
 	return &shaderPipeline{
 		glId: id,
 	}
+}
+
+func (shaderPipeline *shaderPipeline) SetDebugLabel(label string) {
+	setObjectLabel(gl.PROGRAM_PIPELINE, shaderPipeline.glId, label)
 }
 
 func (shaderPipeline *shaderPipeline) Attach(program ShaderProgram, stages int) {
@@ -161,6 +166,7 @@ type program struct {
 }
 
 type ShaderProgram interface {
+	LabeledGlObject
 	Id() uint32
 	Compile() error
 	CompileWith(defs map[string]string) error
@@ -210,6 +216,11 @@ func NewShader(source string, stage int) ShaderProgram {
 
 func (prog *program) Compile() error {
 	return prog.CompileWith(nil)
+}
+
+func (prog *program) SetDebugLabel(label string) {
+	// FIXME: Doesn't work
+	setObjectLabel(gl.PROGRAM, prog.glId, label)
 }
 
 func (prog *program) CompileWith(defs map[string]string) error {

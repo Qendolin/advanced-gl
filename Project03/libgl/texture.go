@@ -18,6 +18,7 @@ type texture struct {
 }
 
 type UnboundTexture interface {
+	LabeledGlObject
 	Id() uint32
 	Type() uint32
 	Dimensions() int
@@ -54,6 +55,10 @@ func (tex *texture) As(glType uint32) UnboundTexture {
 		glId:   tex.Id(),
 		glType: glType,
 	}
+}
+
+func (tex *texture) SetDebugLabel(label string) {
+	setObjectLabel(gl.TEXTURE, tex.glId, label)
 }
 
 func (tex *texture) Type() uint32 {
@@ -197,6 +202,7 @@ type sampler struct {
 }
 
 type UnboundSampler interface {
+	LabeledGlObject
 	Id() uint32
 	Bind(unit int) BoundSampler
 	FilterMode(min, mag int32)
@@ -222,6 +228,10 @@ func NewSampler() UnboundSampler {
 
 func (s *sampler) Id() uint32 {
 	return s.glId
+}
+
+func (s *sampler) SetDebugLabel(label string) {
+	setObjectLabel(gl.SAMPLER, s.glId, label)
 }
 
 func (s *sampler) Bind(unit int) BoundSampler {

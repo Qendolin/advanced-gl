@@ -27,10 +27,12 @@ type BloomEffect struct {
 func NewBloomEffect(levels int, up, down libgl.UnboundShaderPipeline) *BloomEffect {
 
 	sampler := libgl.NewSampler()
+	sampler.SetDebugLabel("bloom_effect")
 	sampler.FilterMode(gl.LINEAR_MIPMAP_NEAREST, gl.LINEAR)
 	sampler.WrapMode(gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE, 0)
 
 	fbo := libgl.NewFramebuffer()
+	fbo.SetDebugLabel("bloom_effect")
 	fbo.BindTargets(0)
 
 	factors := make([]float32, levels)
@@ -92,11 +94,13 @@ func (effect *BloomEffect) Resize(width, height int) {
 	}
 
 	effect.upTexture = libgl.NewTexture(gl.TEXTURE_2D)
+	effect.upTexture.SetDebugLabel("bloom_effect_up")
 	effect.upTexture.Allocate(effect.levels, gl.R11F_G11F_B10F, width, height, 0)
 	for i := 0; i < effect.levels; i++ {
 		effect.upViews[i] = effect.upTexture.CreateView(gl.TEXTURE_2D, gl.R11F_G11F_B10F, i, i, 0, 0)
 	}
 	effect.downTexture = libgl.NewTexture(gl.TEXTURE_2D)
+	effect.downTexture.SetDebugLabel("bloom_effect_down")
 	effect.downTexture.Allocate(effect.levels, gl.R11F_G11F_B10F, width/2, height/2, 0)
 	for i := 0; i < effect.levels; i++ {
 		effect.downViews[i] = effect.downTexture.CreateView(gl.TEXTURE_2D, gl.R11F_G11F_B10F, i, i, 0, 0)

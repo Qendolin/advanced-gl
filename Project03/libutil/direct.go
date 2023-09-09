@@ -1,7 +1,7 @@
-package libgl
+package libutil
 
 import (
-	"advanced-gl/Project03/libutil"
+	"advanced-gl/Project03/libgl"
 	"math"
 
 	"github.com/go-gl/gl/v4.5-core/gl"
@@ -9,9 +9,9 @@ import (
 )
 
 type DirectBuffer struct {
-	vao       UnboundVertexArray
-	vbo       UnboundBuffer
-	shader    UnboundShaderPipeline
+	vao       libgl.UnboundVertexArray
+	vbo       libgl.UnboundBuffer
+	shader    libgl.UnboundShaderPipeline
 	data      []float32
 	color     mgl32.Vec3
 	stroke    float32
@@ -20,12 +20,12 @@ type DirectBuffer struct {
 	normal    mgl32.Vec3
 }
 
-func NewDirectDrawBuffer(shader UnboundShaderPipeline) *DirectBuffer {
-	vao := NewVertexArray()
+func NewDirectDrawBuffer(shader libgl.UnboundShaderPipeline) *DirectBuffer {
+	vao := libgl.NewVertexArray()
 	vao.Layout(0, 0, 3, gl.FLOAT, false, 0)
 	vao.Layout(0, 1, 3, gl.FLOAT, false, 3*4)
 	vao.Layout(0, 2, 3, gl.FLOAT, false, 6*4)
-	vbo := NewBuffer()
+	vbo := libgl.NewBuffer()
 	vbo.AllocateEmpty(1e6, gl.DYNAMIC_STORAGE_BIT)
 	// 3 floats position + 3 floats color + 3 float normal
 	vao.BindBuffer(0, vbo, 0, (3+3+3)*4)
@@ -100,7 +100,7 @@ func (db *DirectBuffer) Quad(a, b, c, d mgl32.Vec3) {
 // A--B
 func (db *DirectBuffer) Line(a, b mgl32.Vec3) {
 	v := b.Sub(a)
-	normal := libutil.Perpendicular(v).Normalize().Mul(db.stroke)
+	normal := Perpendicular(v).Normalize().Mul(db.stroke)
 	bitangent := normal.Cross(v).Normalize().Mul(db.stroke)
 	a0 := mgl32.Vec3{a[0] + normal[0]/2, a[1] + normal[1]/2, a[2] + normal[2]/2}
 	a1 := mgl32.Vec3{a[0] - normal[0]/2, a[1] - normal[1]/2, a[2] - normal[2]/2}
@@ -135,7 +135,7 @@ func (db *DirectBuffer) RegularPolyLine(c, n mgl32.Vec3, r float32, s int) {
 	step := float32(2*math.Pi) / float32(s)
 	r0, r1 := r-db.stroke/2, r+db.stroke/2
 	rot := mgl32.HomogRotate3D(step, n.Normalize()).Mat3()
-	v0 := libutil.Perpendicular(n).Normalize()
+	v0 := Perpendicular(n).Normalize()
 	for i := 0; i < s; i++ {
 		v1 := rot.Mul3x1(v0)
 		db.Quad(c.Add(v0.Mul(r0)), c.Add(v0.Mul(r1)), c.Add(v1.Mul(r0)), c.Add(v1.Mul(r1)))
@@ -148,7 +148,7 @@ func (db *DirectBuffer) RegularPoly(c, n mgl32.Vec3, r float32, s int) {
 	db.normal = n.Normalize()
 	step := float32(2*math.Pi) / float32(s)
 	rot := mgl32.HomogRotate3D(step, n.Normalize()).Mat3()
-	v0 := libutil.Perpendicular(n).Normalize()
+	v0 := Perpendicular(n).Normalize()
 	for i := 0; i < s; i++ {
 		v1 := rot.Mul3x1(v0)
 		db.Tri(c, c.Add(v0.Mul(r)), c.Add(v1.Mul(r)))
@@ -167,7 +167,7 @@ func (db *DirectBuffer) RegularPyramidLine(c, d mgl32.Vec3, a float32, s int) {
 	r := d.Len() * float32(math.Sin(float64(a)))
 	step := float32(2*math.Pi) / float32(s)
 	rot := mgl32.HomogRotate3D(step, d.Normalize()).Mat3()
-	n := libutil.Perpendicular(d).Normalize()
+	n := Perpendicular(d).Normalize()
 	for i := 0; i < s; i++ {
 		db.normal = n
 		v := d.Add(n.Mul(r))
@@ -225,12 +225,12 @@ func (db *DirectBuffer) Draw(viewProj mgl32.Mat4, camPos mgl32.Vec3) {
 
 	db.vao.Bind()
 	db.shader.Bind()
-	db.shader.Get(gl.VERTEX_SHADER).SetUniform("u_view_projection_mat", viewProj)
-	db.shader.Get(gl.FRAGMENT_SHADER).SetUniform("u_camera_position", camPos)
-	GlState.SetEnabled(DepthTest, PolygonOffsetFill)
-	GlState.DepthFunc(DepthFuncLess)
-	GlState.DepthMask(true)
-	GlState.PolygonOffset(-1, -1)
+	db.shader.VertexStage().SetUniform("u_view_projection_mat", viewProj)
+	db.shader.FragmentStage().SetUniform("u_camera_position", camPos)
+	libgl.State.SetEnabled(libgl.DepthTest, libgl.PolygonOffsetFill)
+	libgl.State.DepthFunc(libgl.DepthFuncLess)
+	libgl.State.DepthMask(true)
+	libgl.State.PolygonOffset(-1, -1)
 	gl.DrawArrays(gl.TRIANGLES, 0, int32(len(db.data)/9))
 
 	db.Clear()

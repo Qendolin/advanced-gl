@@ -1,5 +1,5 @@
 #version 450 core
-//meta:name sky_vert
+
 
 layout(location = 0) in vec3 in_position;
 

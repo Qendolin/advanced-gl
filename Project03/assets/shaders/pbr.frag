@@ -1,5 +1,5 @@
 #version 450 core
-//meta:name geometry_frag
+
 
 layout(early_fragment_tests) in;
 
@@ -47,7 +47,8 @@ float DistributionGGX(vec3 N, vec3 H, float roughness)
 
     float nom   = a2;
     float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    denom = PI * denom * denom;
+    // when roughness is zero and N = H denom would be 0
+    denom = PI * denom * denom + 5e-6;
 
     return nom / denom;
 }
@@ -66,7 +67,7 @@ float GeometrySchlickGGX(float NdotV, float roughness)
 float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 {
     // + 5e-6 to prevent artifacts, value is from https://google.github.io/filament/Filament.html#materialsystem/specularbrdf:~:text=float%20NoV%20%3D%20abs(dot(n%2C%20v))%20%2B%201e%2D5%3B
-    float NdotV = max(dot(N, V), 0.0) * (1.0 - 5e-6) + 5e-6;
+    float NdotV = max(dot(N, V), 0.0) + 5e-6;
     float NdotL = max(dot(N, L), 0.0);
     float ggx2 = GeometrySchlickGGX(NdotV, roughness);
     float ggx1 = GeometrySchlickGGX(NdotL, roughness);
@@ -102,12 +103,6 @@ vec3 sampleAmbient(vec3 N, vec3 V, vec3 R, vec3 F0, float roughness, float metal
     return (kD * diffuse + specular) * ao * u_ambient_factor; 
 }
 
-vec3 reinhard2(vec3 x) {
-  const float L_white = 4.0;
-
-  return (x * (1.0 + x / (L_white * L_white))) / (1.0 + x);
-}
-
 void main()
 {
     vec3 albedo     = pow(texture(u_albedo, in_uv).rgb, vec3(2.2));
@@ -117,7 +112,7 @@ void main()
     float ao        = orm.x;
 
     vec3 tN = texture(u_normal, in_uv).xyz * 2.0 - 1.0;
-    roughness = adjustRoughness(tN, roughness) - 0.0001;
+    roughness = adjustRoughness(tN, roughness);
 
     vec3 N = transformNormal(tN);
     vec3 V = normalize(u_camera_position - in_world_position);
@@ -135,7 +130,7 @@ void main()
         // calculate per-light radiance
         vec3 L = normalize(u_light_positions[i] - in_world_position);
         vec3 H = normalize(V + L);
-        float distance = length(u_light_positions[i] - in_world_position);
+        float distance = length(u_light_positions[i] - in_world_position) + 1e-5;
         float attenuation = 1.0 / (distance * distance);
         vec3 radiance = u_light_colors[i] * attenuation;
 
@@ -165,6 +160,10 @@ void main()
         // The ao term doesn't really belong here, but I like it better that way
         float occlusion = mix(ao, 1.0, NdotL);
 
+        // if(isinf(NDF)) {
+        //     continue;
+        // }
+
         // add to outgoing radiance Lo
         Lo += (kD * albedo / PI + specular) * radiance * NdotL * occlusion;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
     }
@@ -174,11 +173,6 @@ void main()
     vec3 ambient = sampleAmbient(N, V, R, F0, roughness, metallic, albedo, ao);
 
     vec3 color = ambient + Lo;
-
-    // HDR tonemapping
-    color = reinhard2(color);
-    // gamma correct
-    color = pow(color, vec3(1.0/2.2));
 
     out_color = vec4(color, 1.0);
 }

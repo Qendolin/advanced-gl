@@ -117,17 +117,17 @@ func (conv *glConverter) Convert(image *stbi.RgbaHdr, size int) (*IblEnv, error)
 
 	// convert HDR equirectangular environment map to cubemap equivalent
 	conv.shader.Bind()
-	conv.shader.Get(gl.FRAGMENT_SHADER).SetUniform("u_equirectangular_texture", 0)
-	conv.shader.Get(gl.VERTEX_SHADER).SetUniform("u_projection_mat", captureProjection)
+	conv.shader.FragmentStage().SetUniform("u_equirectangular_texture", 0)
+	conv.shader.VertexStage().SetUniform("u_projection_mat", captureProjection)
 	hdrTexture.Bind(0)
 	conv.hdrSampler.Bind(0)
 	conv.cubeVao.Bind()
 
 	// don't forget to configure the viewport to the capture dimensions.
-	libgl.GlState.Viewport(0, 0, size, size)
+	libgl.State.Viewport(0, 0, size, size)
 	conv.captureFbo.Bind(gl.DRAW_FRAMEBUFFER)
 	for i := 0; i < 6; i++ {
-		conv.shader.Get(gl.VERTEX_SHADER).SetUniform("u_view_mat", captureViews[i])
+		conv.shader.VertexStage().SetUniform("u_view_mat", captureViews[i])
 
 		conv.captureFbo.AttachTextureLayer(0, cubemap, i)
 
@@ -141,10 +141,10 @@ func (conv *glConverter) Convert(image *stbi.RgbaHdr, size int) (*IblEnv, error)
 		for i := 0; i < 6; i++ {
 			face := uint32(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i)
 			cubemap.As(face).Bind(0)
-			gl.GetTexImage(face, 0, gl.RGB, gl.FLOAT, libutil.Pointer(&result[i*faceLen]))
+			gl.GetTexImage(face, 0, gl.RGB, gl.FLOAT, libgl.Pointer(&result[i*faceLen]))
 		}
 	} else {
-		gl.GetTextureImage(cubemap.Id(), 0, gl.RGB, gl.FLOAT, int32(len(result)*4), libutil.Pointer(result))
+		gl.GetTextureImage(cubemap.Id(), 0, gl.RGB, gl.FLOAT, int32(len(result)*4), libgl.Pointer(result))
 	}
 
 	return NewIblEnv(result, size, 1), nil
@@ -156,7 +156,7 @@ func (conv *glConverter) Release() {
 	conv.cubeVbo.Delete()
 	conv.cubemapSampler.Delete()
 	conv.hdrSampler.Delete()
-	conv.shader.Get(gl.VERTEX_SHADER).Delete()
-	conv.shader.Get(gl.FRAGMENT_SHADER).Delete()
+	conv.shader.VertexStage().Delete()
+	conv.shader.FragmentStage().Delete()
 	conv.shader.Delete()
 }

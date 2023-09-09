@@ -78,9 +78,9 @@ func TestMain(m *testing.M) {
 	}))
 
 	libgl.GlEnv = libgl.GetGlEnv()
-	libgl.GlState = libgl.NewGlStateManager()
-	libgl.GlState.Enable(gl.DEBUG_OUTPUT)
-	libgl.GlState.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
+	libgl.State = libgl.NewGlStateManager()
+	libgl.State.Enable(gl.DEBUG_OUTPUT)
+	libgl.State.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS)
 
 	gl.DebugMessageCallback(func(source, gltype, id, severity uint32, length int32, message string, userParam unsafe.Pointer) {
 		fmt.Printf("GL: %v\n", message)

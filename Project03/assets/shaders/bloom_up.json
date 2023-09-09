@@ -1,0 +1,4 @@
+{
+	"fragment": "bloom_up.frag",
+	"vertex": "quad_to_uv.vert"
+}

@@ -32,6 +32,8 @@ type UnboundShaderPipeline interface {
 	ReAttach(stages int)
 	Detach(stages int)
 	Get(stage int) ShaderProgram
+	FragmentStage() ShaderProgram
+	VertexStage() ShaderProgram
 	Id() uint32
 	Delete()
 }
@@ -119,8 +121,16 @@ func (shaderPipeline *shaderPipeline) Get(stage int) ShaderProgram {
 	return nil
 }
 
+func (shaderPipeline *shaderPipeline) VertexStage() ShaderProgram {
+	return shaderPipeline.vertStage
+}
+
+func (shaderPipeline *shaderPipeline) FragmentStage() ShaderProgram {
+	return shaderPipeline.fragStage
+}
+
 func (shaderPipeline *shaderPipeline) Bind() BoundShaderPipeline {
-	GlState.BindProgramPipeline(shaderPipeline.glId)
+	State.BindProgramPipeline(shaderPipeline.glId)
 	return BoundShaderPipeline(shaderPipeline)
 }
 
@@ -145,7 +155,6 @@ type program struct {
 	definitions      map[string]glslDef
 	versionEnd       int
 	glId             uint32
-	name             string
 	sourceTemplate   string
 	sourceLive       string
 	stage            int
@@ -153,7 +162,6 @@ type program struct {
 
 type ShaderProgram interface {
 	Id() uint32
-	Name() string
 	Compile() error
 	CompileWith(defs map[string]string) error
 	GetUniformLocation(name string) int32
@@ -164,15 +172,11 @@ type ShaderProgram interface {
 }
 
 func NewShader(source string, stage int) ShaderProgram {
-	name := "untitled"
-
-	metaMatches := shaderMetaPattern.FindAllStringSubmatch(source, -1)
-	for _, match := range metaMatches {
-		key, value := match[1], strings.TrimSpace(match[2])
-		if strings.EqualFold(key, "name") {
-			name = value
-		}
-	}
+	// Currently unused
+	// metaMatches := shaderMetaPattern.FindAllStringSubmatch(source, -1)
+	// for _, match := range metaMatches {
+	// 	key, value := match[1], strings.TrimSpace(match[2])
+	// }
 
 	defineMatches := shaderDefinePattern.FindAllStringSubmatch(source, -1)
 	definitions := make(map[string]glslDef, len(defineMatches))
@@ -198,15 +202,10 @@ func NewShader(source string, stage int) ShaderProgram {
 
 	return &program{
 		definitions:    definitions,
-		name:           name,
 		stage:          stage,
 		sourceTemplate: source,
 		versionEnd:     shaderVersionPattern.FindStringIndex(source)[1],
 	}
-}
-
-func (prog *program) Name() string {
-	return prog.name
 }
 
 func (prog *program) Compile() error {
@@ -253,12 +252,12 @@ func (prog *program) CompileWith(defs map[string]string) error {
 	var ok int32
 	gl.GetProgramiv(id, gl.LINK_STATUS, &ok)
 	if ok == gl.FALSE {
-		return fmt.Errorf("failed to link %v shader, log: %v", prog.name, readProgramInfoLog(id))
+		return fmt.Errorf("failed to link shader, log: %v", readProgramInfoLog(id))
 	}
 	gl.ValidateProgram(id)
 	gl.GetProgramiv(id, gl.VALIDATE_STATUS, &ok)
 	if ok == gl.FALSE {
-		return fmt.Errorf("failed to validate %v shader, log: %v", prog.name, readProgramInfoLog(id))
+		return fmt.Errorf("failed to validate shader, log: %v", readProgramInfoLog(id))
 	}
 
 	prog.glId = id
@@ -299,7 +298,7 @@ func (prog *program) GetUniformLocation(name string) int32 {
 	prog.uniformLocations[name] = location
 
 	if location == -1 {
-		log.Printf("%v shader: could not get location of %q\n", prog.name, name)
+		log.Printf("could not get location of %q\n", name)
 	}
 
 	return location

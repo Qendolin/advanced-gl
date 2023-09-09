@@ -1,5 +1,5 @@
 #version 430
-//meta:name imgui_frag
+
 
 layout(location = 0) in vec2 in_uv;
 layout(location = 1) in vec4 in_color;

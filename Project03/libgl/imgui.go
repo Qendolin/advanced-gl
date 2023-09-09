@@ -123,7 +123,7 @@ func (gui *ImGui) Draw() {
 
 	dispWidth, dispHeight := win.GetSize()
 	fbWidth, fbHeight := win.GetFramebufferSize()
-	GlState.Viewport(0, 0, fbWidth, fbHeight)
+	State.Viewport(0, 0, fbWidth, fbHeight)
 	io.SetDisplaySize(imgui.Vec2{X: float32(dispWidth), Y: float32(dispHeight)})
 	ortho := mgl32.Ortho2D(0, float32(dispWidth), float32(dispHeight), 0)
 
@@ -131,15 +131,15 @@ func (gui *ImGui) Draw() {
 	io.SetDeltaTime(time - gui.FrameTime)
 	gui.FrameTime = time
 
-	GlState.BindVertexArray(gui.vao)
+	State.BindVertexArray(gui.vao)
 	gui.shader.Bind()
-	gui.shader.Get(gl.VERTEX_SHADER).SetUniform("u_proj_mat", ortho)
+	gui.shader.VertexStage().SetUniform("u_proj_mat", ortho)
 
-	GlState.SetEnabled(Blend, ScissorTest)
-	GlState.BlendEquation(BlendFuncAdd)
-	GlState.BlendFunc(BlendSrcAlpha, BlendOneMinusSrcAlpha)
-	GlState.ActiveTextue(0)
-	GlState.BindSampler(0, 0)
+	State.SetEnabled(Blend, ScissorTest)
+	State.BlendEquation(BlendFuncAdd)
+	State.BlendFunc(BlendSrcAlpha, BlendOneMinusSrcAlpha)
+	State.ActiveTextue(0)
+	State.BindSampler(0, 0)
 
 	imgui.Render()
 	drawData := imgui.RenderedDrawData()
@@ -187,13 +187,13 @@ func (gui *ImGui) Draw() {
 			if cmd.HasUserCallback() {
 				cmd.CallUserCallback(list)
 			} else {
-				GlState.BindTexture(gl.TEXTURE_2D, uint32(cmd.TextureID()))
+				State.BindTexture(gl.TEXTURE_2D, uint32(cmd.TextureID()))
 				clipRect := cmd.ClipRect()
 				x, y := int(clipRect.X), int(fbHeight)-int(clipRect.W)
 				if y <= 0 {
 					y = 0
 				}
-				GlState.Scissor(x, y, int(clipRect.Z-clipRect.X), int(clipRect.W-clipRect.Y))
+				State.Scissor(x, y, int(clipRect.Z-clipRect.X), int(clipRect.W-clipRect.Y))
 				gl.DrawElementsBaseVertexWithOffset(gl.TRIANGLES, int32(cmd.ElementCount()), indexType, uintptr(cmd.IndexOffset()*indexSize), int32(cmd.VertexOffset()))
 			}
 		}

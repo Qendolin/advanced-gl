@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
+	"advanced-gl/Project03/effects"
 	"advanced-gl/Project03/ibl"
 	. "advanced-gl/Project03/libgl"
 	. "advanced-gl/Project03/libscn"
@@ -71,7 +73,10 @@ func main() {
 	})
 	check(err)
 
-	GlState = NewGlStateManager()
+	glRenderer := string(gl.GoStr(gl.GetString(gl.RENDERER)))
+	log.Printf("Using GPU: %s\n", glRenderer)
+
+	State = NewGlStateManager()
 	GlEnv = GetGlEnv()
 	Input = NewInputManager(ctx)
 
@@ -80,9 +85,11 @@ func main() {
 	reload := false
 	speed := float32(1.0)
 	abmientFactor := float32(1.0)
+	exposure := float32(1.0)
+	bloomFactor := float32(0.3)
 	var (
-		selectedMaterial  string = "array_test"       // array_test, dirty_mirror
-		selectedMesh      string = "array_spheres_uv" // array_spheres_uv, plane
+		selectedMaterial  string = "dirty_mirror" // array_test, dirty_mirror, square_floor
+		selectedMesh      string = "plane"        // array_spheres_uv, plane
 		selectedHdriName  string
 		selectedHdriLevel int32
 		selectedHdri      *ibl.IblEnv
@@ -141,25 +148,28 @@ func main() {
 	viewportWidth := int(viewportDims[2])
 	viewportHeight := int(viewportDims[3])
 
-	msFbo := NewFramebuffer()
-	msColorAttachment := NewTexture(gl.TEXTURE_2D_MULTISAMPLE)
-	msColorAttachment.AllocateMS(gl.RGBA8, viewportWidth, viewportHeight, 0, 2, true)
-	msFbo.AttachTexture(0, msColorAttachment)
-	msFbo.BindTargets(0)
-	msDepthAttachment := NewRenderbuffer()
-	msDepthAttachment.AllocateMS(gl.DEPTH24_STENCIL8, viewportWidth, viewportHeight, 2)
-	msFbo.AttachRenderbuffer(gl.DEPTH_ATTACHMENT, msDepthAttachment)
-	check(msFbo.Check(gl.DRAW_FRAMEBUFFER))
+	hdrFbo := NewFramebuffer()
+	hdrColorAttachment := NewTexture(gl.TEXTURE_2D)
+	hdrColorAttachment.Allocate(1, gl.R11F_G11F_B10F, viewportWidth, viewportHeight, 0)
+	hdrFbo.AttachTexture(0, hdrColorAttachment)
+	hdrFbo.BindTargets(0)
+
+	hdrDepthAttachment := NewTexture(gl.TEXTURE_2D)
+	hdrDepthAttachment.Allocate(1, gl.DEPTH24_STENCIL8, viewportWidth, viewportHeight, 0)
+	hdrFbo.AttachTexture(gl.DEPTH_ATTACHMENT, hdrDepthAttachment)
+	check(hdrFbo.Check(gl.DRAW_FRAMEBUFFER))
 
 	var (
 		pbrShader          UnboundShaderPipeline
 		skyShader          UnboundShaderPipeline
-		dd                 *DirectBuffer
+		postShader         UnboundShaderPipeline
+		dd                 *libutil.DirectBuffer
 		gui                *ImGui
 		envCubemap         UnboundTexture
 		iblDiffuseCubemap  UnboundTexture
 		iblSpecularCubemap UnboundTexture
 		iblBdrfLut         UnboundTexture
+		bloom              *effects.BloomEffect
 	)
 
 	lm.OnLoad(func(ctx *glfw.Window) {
@@ -168,13 +178,29 @@ func main() {
 
 		directShader, err := pack.LoadShaderPipeline("direct")
 		check(err)
-		dd = NewDirectDrawBuffer(directShader)
+		dd = libutil.NewDirectDrawBuffer(directShader)
 
 		imguiShader, err := pack.LoadShaderPipeline("imgui")
 		check(err)
 		gui = NewImGui(imguiShader)
 
 		skyShader, err = pack.LoadShaderPipeline("sky")
+		check(err)
+
+		bloomUpShader, err := pack.LoadShaderPipeline("bloom_up")
+		check(err)
+		bloomDownShader, err := pack.LoadShaderPipeline("bloom_down")
+		check(err)
+		bloom = effects.NewBloomEffect(8, bloomUpShader, bloomDownShader)
+		for i := range bloom.Factors {
+			if i == 0 {
+				bloom.Factors[i] = 1
+			} else {
+				bloom.Factors[i] = bloom.Factors[i-1] * 0.75
+			}
+		}
+
+		postShader, err = pack.LoadShaderPipeline("post")
 		check(err)
 	})
 
@@ -226,6 +252,10 @@ func main() {
 	cubemapSampler.WrapMode(gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE)
 	cubemapSampler.FilterMode(gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR)
 
+	framebufferSampler := NewSampler()
+	framebufferSampler.WrapMode(gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE)
+	framebufferSampler.FilterMode(gl.NEAREST, gl.NEAREST)
+
 	lutSampler := NewSampler()
 	lutSampler.WrapMode(gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE, gl.CLAMP_TO_EDGE)
 	lutSampler.FilterMode(gl.LINEAR, gl.LINEAR)
@@ -265,7 +295,7 @@ func main() {
 		glfw.PollEvents()
 		Input.Update(ctx)
 
-		msFbo.Bind(gl.DRAW_FRAMEBUFFER)
+		hdrFbo.Bind(gl.DRAW_FRAMEBUFFER)
 
 		movement := Input.GetMovement(glfw.KeyW, glfw.KeyS, glfw.KeyA, glfw.KeyD, glfw.KeySpace, glfw.KeyLeftControl)
 		if movement.LenSqr() != 0 {
@@ -279,26 +309,25 @@ func main() {
 		}
 		cam.UpdateViewMatrix()
 
-		GlState.SetEnabled(DepthTest, CullFace)
-		GlState.DepthFunc(DepthFuncLess)
-		GlState.DepthMask(true)
+		State.SetEnabled(DepthTest, CullFace)
+		State.DepthFunc(DepthFuncLess)
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 		if wireframe {
-			GlState.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+			State.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 		}
 
 		materials := batch.GenerateDrawCommands()
 		batch.CommandBuffer.Bind(gl.DRAW_INDIRECT_BUFFER)
 		batch.VertexArray.Bind()
 		pbrShader.Bind()
-		pbrShader.Get(gl.VERTEX_SHADER).SetUniform("u_view_projection_mat", cam.ProjectionMatrix.Mul4(cam.ViewMatrix))
-		pbrShader.Get(gl.FRAGMENT_SHADER).SetUniform("u_camera_position", cam.Position)
-		pbrShader.Get(gl.FRAGMENT_SHADER).SetUniform("u_ambient_factor", abmientFactor)
+		pbrShader.VertexStage().SetUniform("u_view_projection_mat", cam.ProjectionMatrix.Mul4(cam.ViewMatrix))
+		pbrShader.FragmentStage().SetUniform("u_camera_position", cam.Position)
+		pbrShader.FragmentStage().SetUniform("u_ambient_factor", abmientFactor)
 
 		for i := 0; i < 4; i++ {
-			pbrShader.Get(gl.FRAGMENT_SHADER).SetUniformIndexed("u_light_positions", i, lightPositions[i])
-			pbrShader.Get(gl.FRAGMENT_SHADER).SetUniformIndexed("u_light_colors", i, lightColors[i])
+			pbrShader.FragmentStage().SetUniformIndexed("u_light_positions", i, lightPositions[i])
+			pbrShader.FragmentStage().SetUniformIndexed("u_light_colors", i, lightColors[i])
 		}
 
 		texAlbedoSampler.Bind(0)
@@ -320,13 +349,28 @@ func main() {
 		}
 
 		skyShader.Bind()
-		skyShader.Get(gl.VERTEX_SHADER).SetUniform("u_view_mat", cam.ViewMatrix)
-		skyShader.Get(gl.VERTEX_SHADER).SetUniform("u_projection_mat", cam.ProjectionMatrix)
+		skyShader.VertexStage().SetUniform("u_view_mat", cam.ViewMatrix)
+		skyShader.VertexStage().SetUniform("u_projection_mat", cam.ProjectionMatrix)
 		envCubemap.Bind(0)
 		cubemapSampler.Bind(0)
 		skyBox.Bind()
-		GlState.DepthFunc(gl.LEQUAL)
+		State.DepthFunc(gl.LEQUAL)
 		gl.DrawArrays(gl.TRIANGLES, 0, 6*6)
+
+		bloom.Resize(viewportWidth, viewportHeight)
+		bloomResult := bloom.Render(hdrFbo.GetTexture(0))
+
+		State.SetEnabled()
+
+		State.BindFramebuffer(State.DrawFramebuffer, 0)
+		postShader.Bind()
+		postShader.FragmentStage().SetUniform("u_bloom_factor", bloomFactor)
+		postShader.FragmentStage().SetUniform("u_exposure", exposure)
+		framebufferSampler.Bind(0)
+		hdrFbo.GetTexture(0).Bind(0)
+		framebufferSampler.Bind(1)
+		bloomResult.Bind(1)
+		libutil.DrawQuad()
 
 		im.NewFrame()
 		im.Begin("main_window")
@@ -336,7 +380,7 @@ func main() {
 		}
 
 		if im.Checkbox("Wireframe", &wireframe) {
-			GlState.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
+			State.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
 		}
 
 		im.Text("LOD Bias")
@@ -436,20 +480,28 @@ func main() {
 		}
 
 		im.SliderFloat("Ambient Factor", &abmientFactor, 0, 1)
+		im.SliderFloat("Exposure", &exposure, 0, 1)
+
+		if im.CollapsingHeader("Bloom") {
+			im.SliderFloat("Bloom Factor", &bloomFactor, 0, 1)
+			im.SliderFloat("Bloom Threshold", &bloom.Threshold, 0, 5)
+			im.SliderFloat("Bloom Knee", &bloom.Knee, 0, 1)
+
+			for i := range bloom.Factors {
+				im.SliderFloat(fmt.Sprintf("Level %d", i), &bloom.Factors[i], 0, 1)
+			}
+		}
 
 		im.End()
 
 		dd.Draw(cam.ProjectionMatrix.Mul4(cam.ViewMatrix), cam.Position)
 
 		if wireframe {
-			GlState.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
+			State.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
 		}
 
 		gui.Draw()
 
-		GlState.SetEnabled()
-
-		gl.BlitNamedFramebuffer(msFbo.Id(), 0, 0, 0, int32(viewportWidth), int32(viewportHeight), 0, 0, int32(viewportWidth), int32(viewportHeight), gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT, gl.NEAREST)
 		ctx.SwapBuffers()
 
 		if reload {

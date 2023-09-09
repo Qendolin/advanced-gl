@@ -1,7 +1,6 @@
 package libgl
 
 import (
-	"advanced-gl/Project03/libutil"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -48,7 +47,7 @@ func (vbo *buffer) Id() uint32 {
 }
 
 func (vbo *buffer) Bind(target uint32) BoundBuffer {
-	GlState.BindBuffer(target, vbo.glId)
+	State.BindBuffer(target, vbo.glId)
 	return BoundBuffer(vbo)
 }
 
@@ -95,7 +94,7 @@ func (vbo *buffer) Allocate(data any, flags int) {
 		return
 	}
 	vbo.warnAllocationSize(size)
-	gl.NamedBufferStorage(vbo.glId, size, libutil.Pointer(data), uint32(flags))
+	gl.NamedBufferStorage(vbo.glId, size, Pointer(data), uint32(flags))
 	vbo.size = size
 	vbo.flags = uint32(flags)
 	vbo.immutable = true
@@ -110,7 +109,7 @@ func (vbo *buffer) AllocateMutable(data any, usage int) {
 		log.Panicf("%v does not have a fixed size", data)
 	}
 	vbo.warnAllocationSize(size)
-	gl.NamedBufferData(vbo.glId, size, libutil.Pointer(data), uint32(usage))
+	gl.NamedBufferData(vbo.glId, size, Pointer(data), uint32(usage))
 	vbo.flags = uint32(usage)
 	vbo.size = size
 }
@@ -186,11 +185,11 @@ func (vbo *buffer) Write(offset int, data any) {
 	if size == -1 {
 		log.Panicf("%T does not have a fixed size", data)
 	}
-	gl.NamedBufferSubData(vbo.glId, int(offset), size, libutil.Pointer(data))
+	gl.NamedBufferSubData(vbo.glId, int(offset), size, Pointer(data))
 }
 
 func (vbo *buffer) WriteRange(offset int, size int, data any) {
-	gl.NamedBufferSubData(vbo.glId, int(offset), size, libutil.Pointer(data))
+	gl.NamedBufferSubData(vbo.glId, int(offset), size, Pointer(data))
 }
 
 func (vbo *buffer) WriteIndex(index int, data any) {
@@ -198,7 +197,7 @@ func (vbo *buffer) WriteIndex(index int, data any) {
 	if size == -1 {
 		log.Panicf("%T does not have a fixed size", data)
 	}
-	gl.NamedBufferSubData(vbo.glId, int(index*size), size, libutil.Pointer(data))
+	gl.NamedBufferSubData(vbo.glId, int(index*size), size, Pointer(data))
 }
 
 func (vbo *buffer) Delete() {
@@ -237,7 +236,7 @@ func NewVertexArray() UnboundVertexArray {
 }
 
 func (vao *vertexArray) Bind() BoundVertexArray {
-	GlState.BindVertexArray(vao.glId)
+	State.BindVertexArray(vao.glId)
 	return BoundVertexArray(vao)
 }
 

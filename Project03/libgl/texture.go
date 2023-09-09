@@ -1,7 +1,6 @@
 package libgl
 
 import (
-	"advanced-gl/Project03/libutil"
 	"fmt"
 	"log"
 	"math"
@@ -81,7 +80,7 @@ func (tex *texture) Id() uint32 {
 }
 
 func (tex *texture) Bind(unit int) BoundTexture {
-	GlState.BindTextureUnit(unit, tex.glId)
+	State.BindTextureUnit(unit, tex.glId)
 	return BoundTexture(tex)
 }
 
@@ -149,11 +148,11 @@ func (tex *texture) Load(level int, width, height, depth int, format uint32, dat
 	dataType, _ := getGlType(data)
 	switch tex.Dimensions() {
 	case 1:
-		gl.TextureSubImage1D(tex.glId, int32(level), 0, int32(width), format, dataType, libutil.Pointer(data))
+		gl.TextureSubImage1D(tex.glId, int32(level), 0, int32(width), format, dataType, Pointer(data))
 	case 2:
-		gl.TextureSubImage2D(tex.glId, int32(level), 0, 0, int32(width), int32(height), format, dataType, libutil.Pointer(data))
+		gl.TextureSubImage2D(tex.glId, int32(level), 0, 0, int32(width), int32(height), format, dataType, Pointer(data))
 	case 3:
-		gl.TextureSubImage3D(tex.glId, int32(level), 0, 0, 0, int32(width), int32(height), int32(depth), format, dataType, libutil.Pointer(data))
+		gl.TextureSubImage3D(tex.glId, int32(level), 0, 0, 0, int32(width), int32(height), int32(depth), format, dataType, Pointer(data))
 	}
 }
 
@@ -226,7 +225,7 @@ func (s *sampler) Id() uint32 {
 }
 
 func (s *sampler) Bind(unit int) BoundSampler {
-	GlState.BindSampler(unit, s.glId)
+	State.BindSampler(unit, s.glId)
 	return BoundSampler(s)
 }
 

@@ -88,7 +88,7 @@ func (fb *framebuffer) Check(target uint32) error {
 }
 
 func (fb *framebuffer) Bind(target uint32) BoundFramebuffer {
-	GlState.BindFramebuffer(target, fb.glId)
+	State.BindFramebuffer(target, fb.glId)
 	return BoundFramebuffer(fb)
 }
 
@@ -115,13 +115,13 @@ func (fb *framebuffer) AttachTextureLayerLevel(index int, texture UnboundTexture
 	}
 	// https://community.intel.com/t5/Graphics/glNamedFramebufferTextureLayer-rejects-cubemaps-of-any-kind/td-p/1167643
 	if texture.Type() == gl.TEXTURE_CUBE_MAP && GlEnv.UseIntelCubemaDsaFix {
-		prevDraw := GlState.DrawFramebuffer
-		prevRead := GlState.DrawFramebuffer
+		prevDraw := State.DrawFramebuffer
+		prevRead := State.DrawFramebuffer
 		fb.Bind(gl.FRAMEBUFFER)
 		gl.BindTexture(gl.TEXTURE_CUBE_MAP, texture.Id())
 		gl.FramebufferTexture2D(gl.FRAMEBUFFER, uint32(index), uint32(gl.TEXTURE_CUBE_MAP_POSITIVE_X+layer), texture.Id(), int32(level))
-		GlState.BindDrawFramebuffer(prevDraw)
-		GlState.BindReadFramebuffer(prevRead)
+		State.BindDrawFramebuffer(prevDraw)
+		State.BindReadFramebuffer(prevRead)
 	} else {
 		gl.NamedFramebufferTextureLayer(fb.glId, uint32(index), texture.Id(), int32(level), int32(layer))
 	}
@@ -185,7 +185,7 @@ func (rb *renderbuffer) Id() uint32 {
 }
 
 func (rb *renderbuffer) Bind() BoundRenderbuffer {
-	GlState.BindRenderbuffer(rb.glId)
+	State.BindRenderbuffer(rb.glId)
 	return BoundRenderbuffer(rb)
 }
 

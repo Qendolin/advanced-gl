@@ -165,7 +165,7 @@ func GetGlEnv() *GlEnvironment {
 	}
 }
 
-var GlState *GlStateManager
+var State *GlStateManager
 
 func NewGlStateManager() *GlStateManager {
 	return &GlStateManager{

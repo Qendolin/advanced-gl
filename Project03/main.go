@@ -86,10 +86,10 @@ func main() {
 	speed := float32(1.0)
 	abmientFactor := float32(1.0)
 	exposure := float32(1.0)
-	bloomFactor := float32(0.3)
+	bloomFactor := float32(0.05)
 	var (
-		selectedMaterial  string = "dirty_mirror" // array_test, dirty_mirror, square_floor
-		selectedMesh      string = "plane"        // array_spheres_uv, plane
+		selectedMaterial  string = "copper" // array_test, dirty_mirror, square_floor
+		selectedMesh      string = "plane"  // array_spheres_uv, plane
 		selectedHdriName  string
 		selectedHdriLevel int32
 		selectedHdri      *ibl.IblEnv
@@ -130,17 +130,17 @@ func main() {
 		batch.Upload(mesh)
 		batch.AddMaterial(material)
 
-		// for x := -2; x <= 2; x++ {
-		// 	for z := -2; z <= 2; z++ {
-		// 		batch.Add(mesh.Name, material.Name, InstanceAttributes{
-		// 			ModelMatrix: mgl32.Translate3D(float32(x*2), 0, float32(z*2)),
-		// 		})
-		// 	}
-		// }
+		for x := -2; x <= 2; x++ {
+			for z := -2; z <= 2; z++ {
+				batch.Add(mesh.Name, material.Name, InstanceAttributes{
+					ModelMatrix: mgl32.Translate3D(float32(x*2), 0, float32(z*2)),
+				})
+			}
+		}
 
-		batch.Add(mesh.Name, material.Name, InstanceAttributes{
-			ModelMatrix: mgl32.Scale3D(1.0, 1.0, 1.0),
-		})
+		// batch.Add(mesh.Name, material.Name, InstanceAttributes{
+		// 	ModelMatrix: mgl32.Scale3D(1.0, 1.0, 1.0),
+		// })
 	})
 
 	viewportDims := [4]int32{}

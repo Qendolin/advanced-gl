@@ -124,9 +124,10 @@ func (effect *BloomEffect) Render(hdrColorTexture libgl.UnboundTexture) libgl.Un
 	hdrColorTexture.Bind(0)
 	knee := effect.Threshold*effect.Knee + 1e-5
 	effect.downShader.FragmentStage().SetUniform("u_threshold", mgl32.Vec4{effect.Threshold, effect.Threshold - knee, knee * 2, 0.25 / knee})
+	effect.downShader.FragmentStage().SetUniform("u_first_pass", 1)
 	libgl.State.Viewport(0, 0, vw/2, vh/2)
 	libutil.DrawQuad()
-	effect.downShader.FragmentStage().SetUniform("u_threshold", mgl32.Vec4{})
+	effect.downShader.FragmentStage().SetUniform("u_first_pass", 0)
 
 	for i := 0; i < len(effect.downViews)-1; i++ {
 		effect.downViews[i].Bind(0)

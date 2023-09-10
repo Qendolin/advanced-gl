@@ -11,9 +11,11 @@ layout(binding = 1) uniform sampler2D u_bloom;
 uniform float u_bloom_factor;
 uniform float u_exposure;
 
+const float WhiteLevel = 11.0;
+
 float luminance(vec3 v)
 {
-    return dot(v, vec3(0.2126f, 0.7152f, 0.0722f));
+    return dot(v, vec3(0.2126, 0.7152, 0.0722));
 }
 
 vec3 change_luminance(vec3 c_in, float l_out)
@@ -23,16 +25,13 @@ vec3 change_luminance(vec3 c_in, float l_out)
 }
 
 vec3 reinhard2(vec3 x) {
-  const float L_white = 4.0;
-
-  return (x * (1.0 + x / (L_white * L_white))) / (1.0 + x);
+  return (x * (1.0 + x / (WhiteLevel * WhiteLevel))) / (1.0 + x);
 }
 
 vec3 reinhard2_lumi(vec3 v) {
-  const float L_white = 4.0;
   float l_old = luminance(v);
-  float numerator = l_old * (1.0f + (l_old / (L_white * L_white)));
-  float l_new = numerator / (1.0f + l_old);
+  float numerator = l_old * (1.0 + (l_old / (WhiteLevel * WhiteLevel)));
+  float l_new = numerator / (1.0 + l_old);
   return change_luminance(v, l_new);
 }
 
@@ -53,42 +52,73 @@ vec3 exposure(vec3 x) {
 
 vec3 uncharted2_tonemap_partial(vec3 x)
 {
-    float A = 0.15f;
-    float B = 0.50f;
-    float C = 0.10f;
-    float D = 0.20f;
-    float E = 0.02f;
-    float F = 0.30f;
+    float A = 0.15;
+    float B = 0.50;
+    float C = 0.10;
+    float D = 0.20;
+    float E = 0.02;
+    float F = 0.30;
     return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
 }
 
 vec3 uncharted2_filmic(vec3 v)
 {
-    float exposure_bias = 2.0f;
+    float exposure_bias = 2.0;
     vec3 curr = uncharted2_tonemap_partial(v * exposure_bias);
 
-    vec3 W = vec3(11.2f);
-    vec3 white_scale = vec3(1.0f) / uncharted2_tonemap_partial(W);
+    vec3 W = vec3(11.2);
+    vec3 white_scale = vec3(1.0) / uncharted2_tonemap_partial(W);
     return curr * white_scale;
 }
 
 vec3 aces_approx(vec3 v)
 {
-    v *= 0.6f;
-    float a = 2.51f;
-    float b = 0.03f;
-    float c = 2.43f;
-    float d = 0.59f;
-    float e = 0.14f;
-    return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0f, 1.0f);
+    v *= 0.6;
+    float a = 2.51;
+    float b = 0.03;
+    float c = 2.43;
+    float d = 0.59;
+    float e = 0.14;
+    return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0, 1.0);
 }
+
+// https://github.com/Unity-Technologies/Graphics/blob/9e7b41b807a6c18597e2cdb64c693c02e08d5ab/com.unity.postprocessing/PostProcessing/Shaders/Colors.hlsl#L291C1-L321C1
+// Neutral tonemapping (Hable/Hejl/Frostbite)
+// Input is linear RGB
+vec3 neutralCurve(vec3 x, float a, float b, float c, float d, float e, float f)
+{
+    return ((x * (a * x + c * b) + d * e) / (x * (a * x + b) + d * f)) - e / f;
+}
+
+vec3 neutralTonemap(vec3 x)
+{
+    // Tonemap
+    float a = 0.2;
+    float b = 0.29;
+    float c = 0.24;
+    float d = 0.272;
+    float e = 0.02;
+    float f = 0.3;
+    float whiteClip = 0.95;
+
+    vec3 whiteScale = vec3(1.0) / neutralCurve(vec3(WhiteLevel), a, b, c, d, e, f);
+    x = neutralCurve(x * whiteScale, a, b, c, d, e, f);
+    x *= whiteScale;
+
+    // Post-curve white point adjustment
+    x /= whiteClip.xxx;
+
+    return x;
+}
+
 
 void main() {
 	vec3 color = texture(u_color, in_uv).rgb;
 	color += texture(u_bloom, in_uv).rgb * u_bloom_factor;
 
 	// Tonemapping
-  color = reinhard2_lumi(color);
+  color = neutralTonemap(color);
+  // color = reinhard2_lumi(color);
 
   // Gamma correction
   color = clamp(color, vec3(0), vec3(1));

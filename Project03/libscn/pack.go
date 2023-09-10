@@ -315,7 +315,7 @@ func (pack *DirPack) LoadMaterial(name string) (*Material, error) {
 
 	albeoTexture := libgl.NewTexture(gl.TEXTURE_2D)
 	albeoTexture.SetDebugLabel(materialDesc.Albedo)
-	albeoTexture.Allocate(0, gl.RGBA8, albedo.Width, albedo.Height, 0)
+	albeoTexture.Allocate(0, gl.SRGB8, albedo.Width, albedo.Height, 0)
 	albeoTexture.Load(0, albedo.Width, albedo.Height, 0, gl.RGBA, albedo.Pix)
 	albeoTexture.GenerateMipmap()
 

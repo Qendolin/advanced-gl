@@ -88,8 +88,8 @@ func main() {
 	exposure := float32(1.0)
 	bloomFactor := float32(0.05)
 	var (
-		selectedMaterial  string = "copper" // array_test, dirty_mirror, square_floor
-		selectedMesh      string = "plane"  // array_spheres_uv, plane
+		selectedMaterial  string = "herringbone_parquet" // array_test, dirty_mirror, square_floor, herringbone_parquet
+		selectedMesh      string = "plane"               // array_spheres_uv, plane
 		selectedHdriName  string
 		selectedHdriLevel int32
 		selectedHdri      *ibl.IblEnv
@@ -216,11 +216,12 @@ func main() {
 	skyBox.BindBuffer(0, skyBoxVbo, 0, 3*4)
 
 	lm.OnLoad(func(ctx *glfw.Window) {
-		hdri, err := pack.LoadHdri("studio_small_02_4k")
+		hdirName := "small_empty_room_1_4k" // studio_small_02_4k, small_empty_room_1_4k
+		hdri, err := pack.LoadHdri(hdirName)
 		check(err)
-		hdriIrradiance, err := pack.LoadHdri("studio_small_02_4k_diffuse")
+		hdriIrradiance, err := pack.LoadHdri(hdirName + "_diffuse")
 		check(err)
-		hdriReflection, err := pack.LoadHdri("studio_small_02_4k_specular")
+		hdriReflection, err := pack.LoadHdri(hdirName + "_specular")
 		check(err)
 
 		envCubemap = NewTexture(gl.TEXTURE_CUBE_MAP)
@@ -303,6 +304,13 @@ func main() {
 		mgl32.Vec3{4.25, 1.75, 7.0}.Mul(10),
 	}
 
+	envOrigin := mgl32.Vec3{0, 1.2, 0}
+	envPos := mgl32.Vec3{0.07, -0.105, 0}
+	envDim := mgl32.Vec3{3.3, 2.0, 2.3}
+	envRot := libutil.Deg2Rad * 141.8
+	var envTransform mgl32.Mat4
+	envVisualize := false
+
 	lm.Reload(ctx)
 
 	for !ctx.ShouldClose() {
@@ -338,6 +346,9 @@ func main() {
 		pbrShader.VertexStage().SetUniform("u_view_projection_mat", cam.ProjectionMatrix.Mul4(cam.ViewMatrix))
 		pbrShader.FragmentStage().SetUniform("u_camera_position", cam.Position)
 		pbrShader.FragmentStage().SetUniform("u_ambient_factor", abmientFactor)
+		envTransform = mgl32.Translate3D(envOrigin[0], envOrigin[1], envOrigin[2]).Mul4(mgl32.HomogRotate3DY(envRot)).Mul4(mgl32.Scale3D(envDim[0], envDim[1], envDim[2])).Mul4(mgl32.Translate3D(envPos[0], envPos[1], envPos[2]))
+		pbrShader.FragmentStage().SetUniform("u_environment_transform", envTransform.Inv())
+		pbrShader.FragmentStage().SetUniform("u_environment_origin", envOrigin)
 
 		for i := 0; i < 4; i++ {
 			pbrShader.FragmentStage().SetUniformIndexed("u_light_positions", i, lightPositions[i])
@@ -365,6 +376,8 @@ func main() {
 		skyShader.Bind()
 		skyShader.VertexStage().SetUniform("u_view_mat", cam.ViewMatrix)
 		skyShader.VertexStage().SetUniform("u_projection_mat", cam.ProjectionMatrix)
+		skyShader.VertexStage().SetUniform("u_environment_transform", envTransform)
+		skyShader.VertexStage().SetUniform("u_environment_origin", envOrigin)
 		envCubemap.Bind(0)
 		cubemapSampler.Bind(0)
 		skyBox.Bind()
@@ -374,8 +387,9 @@ func main() {
 		bloom.Resize(viewportWidth, viewportHeight)
 		bloomResult := bloom.Render(hdrFbo.GetTexture(0))
 
-		State.SetEnabled()
-
+		State.SetEnabled(DepthTest)
+		State.DepthFunc(DepthFuncAlways)
+		State.DepthMask(true)
 		State.BindFramebuffer(State.DrawFramebuffer, 0)
 		postShader.Bind()
 		postShader.FragmentStage().SetUniform("u_bloom_factor", bloomFactor)
@@ -383,7 +397,9 @@ func main() {
 		framebufferSampler.Bind(0)
 		hdrFbo.GetTexture(0).Bind(0)
 		framebufferSampler.Bind(1)
-		bloomResult.Bind(1)
+		hdrFbo.GetTexture(gl.DEPTH_ATTACHMENT).Bind(1)
+		framebufferSampler.Bind(2)
+		bloomResult.Bind(2)
 		libutil.DrawQuad()
 
 		im.NewFrame()
@@ -446,6 +462,7 @@ func main() {
 					check(err)
 					batch.AddMaterial(mat)
 					selectedMaterial = name
+					// TODO: implement material change
 				}
 			}
 
@@ -461,12 +478,15 @@ func main() {
 					check(err)
 					batch.Upload(mesh)
 					selectedMesh = name
+					// TODO: implement mesh change
 				}
 			}
 
 			im.EndCombo()
 		}
 
+		im.Separator()
+		im.PushID("env")
 		if im.BeginCombo("Environment", selectedHdriName) {
 			hdris := maps.Keys(pack.HdriIndex)
 			slices.Sort(hdris)
@@ -493,8 +513,28 @@ func main() {
 			}
 		}
 
+		envRotDeg := envRot * libutil.Rad2Deg
+		if im.SliderFloat("Rotation", &envRotDeg, 0, 360) {
+			envRot = envRotDeg * libutil.Deg2Rad
+		}
+		im.DragFloat3("Origin", (*[3]float32)(&envOrigin))
+		im.DragFloat3("Position", (*[3]float32)(&envPos))
+		im.DragFloat3("Dimension", (*[3]float32)(&envDim))
+		im.Checkbox("Show", &envVisualize)
+		if envVisualize {
+			dd.Color(1.0, 1.0, 1.0)
+			dd.Shaded()
+			dd.Push()
+			dd.Transform(envTransform)
+			// dd.Transform(mgl32.Translate3D(envOrigin[0], envOrigin[1], envOrigin[2]))
+			dd.UnitBox()
+			dd.Pop()
+			dd.Unshaded()
+		}
 		im.SliderFloat("Ambient Factor", &abmientFactor, 0, 1)
 		im.SliderFloat("Exposure", &exposure, 0, 1)
+		im.PopID()
+		im.Separator()
 
 		if im.CollapsingHeader("Bloom") {
 			im.SliderFloat("Bloom Factor", &bloomFactor, 0, 1)

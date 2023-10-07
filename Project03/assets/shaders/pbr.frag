@@ -19,6 +19,8 @@ uniform vec3 u_camera_position;
 uniform vec3[4] u_light_positions;
 uniform vec3[4] u_light_colors;
 uniform float u_ambient_factor;
+uniform mat4 u_environment_transform;
+uniform vec3 u_environment_origin;
 
 const float PI = 3.14159265359;
 
@@ -26,7 +28,7 @@ vec3 transformNormal(vec3 tN) {
     return normalize(in_tbn * tN);
 }
 
-// Based on https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/course-notes-moving-frostbite-to-pbr-v2.pdf page 92
+// Based on https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/course-notes-moving-frostbite-to-pbr-v32.pdf page 92
 float adjustRoughness(vec3 tN, float roughness) {
     float r = length(tN);
     if (r < 1.0) {
@@ -85,6 +87,30 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+// https://www.clicktorelease.com/blog/making-of-cruciform/
+// https://seblagarde.wordpress.com/2012/09/29/image-based-lighting-approaches-and-parallax-corrected-cubemap/
+vec3 parallaxCorrectNormal(vec3 v, mat4 cubeTransform, vec3 cubeOrigin) {
+    vec3 nDir = normalize(v);
+    vec3 pos = in_world_position;
+    vec3 posLocal = (cubeTransform * vec4(pos, 1.0)).xyz;
+    vec3 nDirLocal = mat3(cubeTransform) * v;
+
+    // The cube has dimensions 1x1x1
+    vec3 cubeMax = vec3(0.5, 0.5, 0.5);
+    vec3 cubeMin = vec3(-0.5, -0.5, -0.5);
+    vec3 rbmax = (cubeMax - posLocal) / nDirLocal;
+    vec3 rbmin = (cubeMin - posLocal) / nDirLocal;
+
+    vec3 rbminmax;
+    rbminmax.x = (nDirLocal.x > 0.0) ? rbmax.x : rbmin.x;
+    rbminmax.y = (nDirLocal.y > 0.0) ? rbmax.y : rbmin.y;
+    rbminmax.z = (nDirLocal.z > 0.0) ? rbmax.z : rbmin.z;
+
+    float correction = min(min(rbminmax.x, rbminmax.y), rbminmax.z);
+    vec3 boxIntersection = pos + nDir * correction;
+
+    return boxIntersection - cubeOrigin;
+}
 
 vec3 sampleAmbient(vec3 N, vec3 V, vec3 R, vec3 F0, float roughness, float metallic, vec3 albedo, float ao)
 {
@@ -96,7 +122,8 @@ vec3 sampleAmbient(vec3 N, vec3 V, vec3 R, vec3 F0, float roughness, float metal
     vec3 diffuse    = irradiance * albedo;
 
     const float MAX_REFLECTION_LOD = 4.0;
-    vec3 reflection = textureLod(u_environment_specualr, R, roughness * MAX_REFLECTION_LOD).rgb;   
+    vec3 correctR = parallaxCorrectNormal(R, u_environment_transform, u_environment_origin);
+    vec3 reflection = textureLod(u_environment_specualr, correctR, roughness * MAX_REFLECTION_LOD).rgb;   
     vec2 envBRDF  = texture(u_environment_brdf_lut, vec2(max(dot(N, V), 0.0), roughness)).rg;
     vec3 specular = reflection * (F * envBRDF.x + envBRDF.y);
 
@@ -105,7 +132,8 @@ vec3 sampleAmbient(vec3 N, vec3 V, vec3 R, vec3 F0, float roughness, float metal
 
 void main()
 {
-    vec3 albedo     = pow(texture(u_albedo, in_uv).rgb, vec3(2.2));
+    // Make sure that the albedo texture is using an sRGB format
+    vec3 albedo     = texture(u_albedo, in_uv).rgb;
     vec3 orm        = texture(u_orm, in_uv).xyz;
     float metallic  = orm.z;
     float roughness = orm.y;
@@ -159,10 +187,6 @@ void main()
 
         // The ao term doesn't really belong here, but I like it better that way
         float occlusion = mix(ao, 1.0, NdotL);
-
-        // if(isinf(NDF)) {
-        //     continue;
-        // }
 
         // add to outgoing radiance Lo
         Lo += (kD * albedo / PI + specular) * radiance * NdotL * occlusion;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again

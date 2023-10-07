@@ -17,7 +17,14 @@ type DirectBuffer struct {
 	stroke    float32
 	shaded    bool
 	autoShade bool
+	stack     []MatrixStackEntry
+	vec4      mgl32.Vec4
 	normal    mgl32.Vec3
+}
+
+type MatrixStackEntry struct {
+	PositionMatrix mgl32.Mat4
+	NormalMatrix   mgl32.Mat3
 }
 
 func NewDirectDrawBuffer(shader libgl.UnboundShaderPipeline) *DirectBuffer {
@@ -37,7 +44,29 @@ func NewDirectDrawBuffer(shader libgl.UnboundShaderPipeline) *DirectBuffer {
 		data:   []float32{},
 		color:  mgl32.Vec3{1, 1, 1},
 		stroke: 0.05,
+		stack:  []MatrixStackEntry{{mgl32.Ident4(), mgl32.Ident3()}},
 	}
+}
+
+func (db *DirectBuffer) Push() {
+	head := db.stack[len(db.stack)-1]
+	db.stack = append(db.stack, head)
+}
+
+func (db *DirectBuffer) Pop() {
+	if len(db.stack) <= 1 {
+		db.stack[0].PositionMatrix = mgl32.Ident4()
+		db.stack[0].NormalMatrix = mgl32.Ident3()
+		return
+	}
+
+	db.stack = db.stack[:len(db.stack)-1]
+}
+
+func (db *DirectBuffer) Transform(matrix mgl32.Mat4) {
+	head := &db.stack[len(db.stack)-1]
+	head.PositionMatrix = head.PositionMatrix.Mul4(matrix)
+	head.NormalMatrix = head.PositionMatrix.Inv().Transpose().Mat3()
 }
 
 func (db *DirectBuffer) Stroke(width float32) {
@@ -69,10 +98,16 @@ func (db *DirectBuffer) Light3(c mgl32.Vec3) {
 
 func (db *DirectBuffer) Vert(pos mgl32.Vec3) {
 	var normal mgl32.Vec3
+	head := db.stack[len(db.stack)-1]
 	if db.shaded {
-		normal = db.normal
+		normal = head.NormalMatrix.Mul3x1(db.normal)
 	}
-	db.data = append(db.data, pos[0], pos[1], pos[2], db.color[0], db.color[1], db.color[2], normal[0], normal[1], normal[2])
+	db.vec4[0] = pos[0]
+	db.vec4[1] = pos[1]
+	db.vec4[2] = pos[2]
+	db.vec4[3] = 1
+	db.vec4 = head.PositionMatrix.Mul4x1(db.vec4)
+	db.data = append(db.data, db.vec4[0], db.vec4[1], db.vec4[2], db.color[0], db.color[1], db.color[2], normal[0], normal[1], normal[2])
 }
 
 // A--B
@@ -89,9 +124,9 @@ func (db *DirectBuffer) Tri(a, b, c mgl32.Vec3) {
 	db.Vert(b)
 }
 
-// A--B
-// |  |
-// C--D
+//	    A--B
+//		|  |
+//		C--D
 func (db *DirectBuffer) Quad(a, b, c, d mgl32.Vec3) {
 	db.Tri(a, b, c)
 	db.Tri(d, c, b)
@@ -210,6 +245,21 @@ func (db *DirectBuffer) UvSphere(c mgl32.Vec3, r float32) {
 		currRing, prevRing = prevRing, currRing
 	}
 	db.autoShade = false
+}
+
+func (db *DirectBuffer) UnitBox() {
+	db.normal = mgl32.Vec3{0, 0, -1} // -z
+	db.Quad(mgl32.Vec3{-0.5, +0.5, -0.5}, mgl32.Vec3{+0.5, +0.5, -0.5}, mgl32.Vec3{-0.5, -0.5, -0.5}, mgl32.Vec3{+0.5, -0.5, -0.5})
+	db.normal = mgl32.Vec3{0, 0, 1} // +z
+	db.Quad(mgl32.Vec3{-0.5, +0.5, +0.5}, mgl32.Vec3{+0.5, +0.5, +0.5}, mgl32.Vec3{-0.5, -0.5, +0.5}, mgl32.Vec3{+0.5, -0.5, +0.5})
+	db.normal = mgl32.Vec3{-1, 0, 0} // -x
+	db.Quad(mgl32.Vec3{-0.5, +0.5, -0.5}, mgl32.Vec3{-0.5, +0.5, +0.5}, mgl32.Vec3{-0.5, -0.5, -0.5}, mgl32.Vec3{-0.5, -0.5, +0.5})
+	db.normal = mgl32.Vec3{1, 0, 0} // +x
+	db.Quad(mgl32.Vec3{+0.5, +0.5, -0.5}, mgl32.Vec3{+0.5, +0.5, +0.5}, mgl32.Vec3{+0.5, -0.5, -0.5}, mgl32.Vec3{+0.5, -0.5, +0.5})
+	db.normal = mgl32.Vec3{0, -1, 0} // -y
+	db.Quad(mgl32.Vec3{-0.5, -0.5, +0.5}, mgl32.Vec3{+0.5, -0.5, +0.5}, mgl32.Vec3{-0.5, -0.5, -0.5}, mgl32.Vec3{+0.5, -0.5, -0.5})
+	db.normal = mgl32.Vec3{0, 1, 0} // +y
+	db.Quad(mgl32.Vec3{-0.5, +0.5, +0.5}, mgl32.Vec3{+0.5, +0.5, +0.5}, mgl32.Vec3{-0.5, +0.5, -0.5}, mgl32.Vec3{+0.5, +0.5, -0.5})
 }
 
 func (db *DirectBuffer) Draw(viewProj mgl32.Mat4, camPos mgl32.Vec3) {

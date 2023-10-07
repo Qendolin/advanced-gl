@@ -6,7 +6,8 @@ layout(location = 0) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 
 layout(binding = 0) uniform sampler2D u_color;
-layout(binding = 1) uniform sampler2D u_bloom;
+layout(binding = 1) uniform sampler2D u_depth;
+layout(binding = 2) uniform sampler2D u_bloom;
 
 uniform float u_bloom_factor;
 uniform float u_exposure;
@@ -125,4 +126,6 @@ void main() {
   color = pow(color, vec3(1.0/2.4));
 
   out_color = vec4(color, 1.);
+
+  gl_FragDepth = texture(u_depth, in_uv).x;
 }

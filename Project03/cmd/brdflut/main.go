@@ -17,11 +17,13 @@ var args = struct {
 	size      int
 	preview   bool
 	grayscale bool
+	compress  bool
 }{
 	samples:   1024,
 	size:      512,
-	preview:   true,
+	preview:   false,
 	grayscale: false,
+	compress:  true,
 }
 
 func printGeneralUsage() {
@@ -38,7 +40,7 @@ func main() {
 	flag.IntVar(&args.size, "size", args.size, "size of the lut")
 	flag.BoolVar(&args.preview, "preview", args.preview, "generate normalized preview png")
 	flag.BoolVar(&args.grayscale, "grayscale", args.grayscale, "generate seperate grayscale images")
-	flag.BoolVar(&args.grayscale, "greyscale", args.grayscale, "see grayscale")
+	flag.BoolVar(&args.compress, "compress", args.compress, "enable lz4 compression")
 
 	flag.Parse()
 
@@ -67,7 +69,12 @@ func saveFloatImage(img *libio.FloatImage, filename, fileext string) {
 	harderr(err)
 	defer file.Close()
 
-	err = libio.EncodeFloatImage(file, img, libio.FloatImageCompressionFixedPoint16Lz4)
+	compression := libio.FloatImageCompressionNone
+	if args.compress {
+		compression = libio.FloatImageCompressionFixedPoint16Lz4
+	}
+
+	err = libio.EncodeFloatImage(file, img, compression)
 	harderr(err)
 
 	if args.preview {

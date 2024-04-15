@@ -50,6 +50,7 @@ func EncodeFloatImage(w io.Writer, img *FloatImage, compression FloatImageCompre
 	case FloatImageCompressionNone:
 		buf := bytes.NewBuffer(make([]byte, img.Bytes()))
 		err = binary.Write(buf, bw.Order, img.Pix)
+		data = buf.Bytes()
 	case FloatImageCompressionFixedPoint16Lz4:
 		data, err = compressFixedPoint16(img.Channels, img.Count(), img.Pix)
 		if err != nil {

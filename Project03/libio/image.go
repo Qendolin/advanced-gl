@@ -14,9 +14,11 @@ type FloatImageVersion uint32
 
 const (
 	F32Version1_001_000 = FloatImageVersion(1_001_000)
+	F32Version1_002_000 = FloatImageVersion(1_002_000)
+	F32Version1_002_001 = FloatImageVersion(1_002_001)
 )
 
-type FloatImageCompression uint32
+type FloatImageCompression uint8
 
 const (
 	FloatImageCompressionNone = FloatImageCompression(iota)

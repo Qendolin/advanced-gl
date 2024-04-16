@@ -33,7 +33,7 @@ func EncodeFloatImage(w io.Writer, img *FloatImage, compression FloatImageCompre
 
 	header := FloatImageHeader{
 		Check:       MagicNumberF32,
-		Version:     F32Version1_001_000,
+		Version:     F32Version1_002_001,
 		Width:       uint32(img.Width),
 		Height:      uint32(img.Height),
 		Channels:    uint8(img.Channels),
@@ -49,6 +49,7 @@ func EncodeFloatImage(w io.Writer, img *FloatImage, compression FloatImageCompre
 	switch compression {
 	case FloatImageCompressionNone:
 		buf := bytes.NewBuffer(make([]byte, img.Bytes()))
+		buf.Reset()
 		err = binary.Write(buf, bw.Order, img.Pix)
 		data = buf.Bytes()
 	case FloatImageCompressionFixedPoint16Lz4:

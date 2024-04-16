@@ -40,7 +40,7 @@ func DecodeFloatImage(r io.Reader) (img *FloatImage, err error) {
 		return nil, fmt.Errorf("f32 header is corrupt; byte 0x%08x", br.LastIndex)
 	}
 
-	if header.Version != F32Version1_001_000 {
+	if header.Version != F32Version1_002_001 {
 		return nil, fmt.Errorf("f32 version %d unsupported; byte 0x%08x", header.Version, br.LastIndex)
 	}
 

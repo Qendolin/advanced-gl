@@ -110,9 +110,11 @@ func (db *DirectBuffer) Vert(pos mgl32.Vec3) {
 	db.data = append(db.data, db.vec4[0], db.vec4[1], db.vec4[2], db.color[0], db.color[1], db.color[2], normal[0], normal[1], normal[2])
 }
 
-// A--B
-// | /
-// C
+// Order:
+//
+//	A--B
+//	| /
+//	C
 func (db *DirectBuffer) Tri(a, b, c mgl32.Vec3) {
 	if db.shaded && db.autoShade {
 		ab := b.Sub(a)
@@ -124,9 +126,11 @@ func (db *DirectBuffer) Tri(a, b, c mgl32.Vec3) {
 	db.Vert(b)
 }
 
-//	    A--B
-//		|  |
-//		C--D
+// Order:
+//
+//	A--B
+//	|  |
+//	C--D
 func (db *DirectBuffer) Quad(a, b, c, d mgl32.Vec3) {
 	db.Tri(a, b, c)
 	db.Tri(d, c, b)

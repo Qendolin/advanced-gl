@@ -61,6 +61,8 @@ func DecodeFloatImage(r io.Reader) (img *FloatImage, err error) {
 			break
 		}
 		data, err = decompressFixedPoint16(int(header.Channels), int(header.Width*header.Height), buf)
+	default:
+		err = fmt.Errorf("unknown compression enum value: %d", header.Compression)
 	}
 
 	if err != nil {

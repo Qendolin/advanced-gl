@@ -22,7 +22,7 @@ float karisAverage(vec3 col)
 }
 
 // Better, temporally stable box filtering
-// [Jimenez14] http://goo.gl/eomGso
+// [Jimenez14] https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare/
 // . . . . . . .
 // . A . B . C .
 // . . D . E . .

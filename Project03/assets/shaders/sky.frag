@@ -8,5 +8,5 @@ layout(binding = 0) uniform samplerCube u_hdri;
 
 void main()
 {
-    out_color = texture(u_hdri, normalize(in_dir)).rgb; 
+    out_color = texture(u_hdri, normalize(in_dir)).rgb;
 }

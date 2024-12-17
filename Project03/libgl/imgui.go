@@ -48,7 +48,7 @@ func NewImGui(shader UnboundShaderPipeline) *ImGui {
 	image := io.Fonts().TextureDataRGBA32()
 	var atlas uint32
 	gl.CreateTextures(gl.TEXTURE_2D, 1, &atlas)
-	gl.TextureStorage2D(atlas, 1, gl.RGBA32F, int32(image.Width), int32(image.Height))
+	gl.TextureStorage2D(atlas, 1, gl.RGBA8, int32(image.Width), int32(image.Height))
 	gl.TextureSubImage2D(atlas, 0, 0, 0, int32(image.Width), int32(image.Height), gl.RGBA, gl.UNSIGNED_BYTE, unsafe.Pointer((*byte)(image.Pixels)))
 	gl.GenerateTextureMipmap(atlas)
 	io.Fonts().SetTextureID(imgui.TextureID(atlas))

@@ -559,7 +559,7 @@ func GenerateClBrdfLut(preferredDevice DeviceType, size, quality int) (*libio.Fl
 		return nil, err
 	}
 
-	result := make([]float32, size*size*2*4)
+	result := make([]float32, size*size*2)
 
 	_, err = core.queue.EnqueueReadImage(dstImage, true, [3]int{}, [3]int{size, size, 1}, 0, 0, unsafe.Pointer(&result[0]), nil)
 	if err != nil {

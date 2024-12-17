@@ -90,6 +90,8 @@ const (
 	DepthFuncAlways   GlDepthFunc = gl.ALWAYS
 )
 
+// FIXME: Opengl can reuse ids if they are deleted. In that case the state manager must be notified of the deletion
+// or it might break, since it might assume that the object is still bound.
 type GlStateManager struct {
 	Caps                                                            map[GlCapability]bool
 	TextureUnits, SamplerUnits                                      []uint32
@@ -134,7 +136,7 @@ type GlFeatures struct {
 
 const (
 	VendorIntel   = "intel"
-	VendorNvidia  = "ati"
+	VendorNvidia  = "nvidia"
 	VendorAmd     = "ati"
 	VendorUnknown = "unknown"
 )

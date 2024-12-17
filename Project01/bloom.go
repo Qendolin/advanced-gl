@@ -5,34 +5,35 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 )
 
-//	For my sanity:
+// For my sanity:
 //
-//	src=1 * (w x h)
+// src=1 * (w x h)
 //
-//		Up		Down
-//	0=	1		1/2
-//	1=	1/2		1/4
-//	2=	1/4		1/8
-//	3=	1/8		1/16
-//	4=	1/16	1/32
-//	5=	1/32	1/64
+//	Up		Down
 //
-//	Down:
+// 0=	1		1/2
+// 1=	1/2		1/4
+// 2=	1/4		1/8
+// 3=	1/8		1/16
+// 4=	1/16	1/32
+// 5=	1/32	1/64
 //
-//	down(src) -> Down[0]
-//	down(Down[1]) -> Down[2]
-//	down(Down[2]) -> Down[3]
-//	down(Down[3]) -> Down[4]
-//	down(Down[4]) -> Down[5]
+// Down:
 //
-//	Up:
+// down(src) -> Down[0]
+// down(Down[1]) -> Down[2]
+// down(Down[2]) -> Down[3]
+// down(Down[3]) -> Down[4]
+// down(Down[4]) -> Down[5]
 //
-//	Down[4] + up(Down[5]) -> Up[5]
-//	Down[3] + up(Up[5]) -> Up[4]
-//	Down[2] + up(Up[4]) -> Up[3]
-//	Down[1] + up(Up[3]) -> Up[2]
-//	Down[0] + up(Up[2]) -> Up[1]
-//	up(Up[1]) -> Up[0]
+// Up:
+//
+// Down[4] + up(Down[5]) -> Up[5]
+// Down[3] + up(Up[5]) -> Up[4]
+// Down[2] + up(Up[4]) -> Up[3]
+// Down[1] + up(Up[3]) -> Up[2]
+// Down[0] + up(Up[2]) -> Up[1]
+// up(Up[1]) -> Up[0]
 func DrawBloom() {
 	gl.PushDebugGroup(gl.DEBUG_SOURCE_APPLICATION, 999, -1, gl.Str("Draw Bloom\x00"))
 	defer gl.PopDebugGroup()
@@ -84,6 +85,6 @@ func DrawBloom() {
 		s.bloomBuffer.AttachTextureLevel(0, s.bloomUp, i)
 		GlState.Viewport(0, 0, vw/(1<<i), vh/(1<<i))
 		gl.DrawArrays(gl.TRIANGLE_STRIP, 0, 4)
-		upView = s.bloomUpViews[i].Bind(1)
+		upView = s.bloomUpViews[i]
 	}
 }

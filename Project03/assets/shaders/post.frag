@@ -8,6 +8,7 @@ layout(location = 0) out vec4 out_color;
 layout(binding = 0) uniform sampler2D u_color;
 layout(binding = 1) uniform sampler2D u_depth;
 layout(binding = 2) uniform sampler2D u_bloom;
+layout(binding = 3) uniform sampler3D u_color_lut;
 
 uniform float u_bloom_factor;
 uniform float u_exposure;
@@ -112,6 +113,14 @@ vec3 neutralTonemap(vec3 x)
     return x;
 }
 
+vec3 colorLookup(vec3 c) {
+  // The sampling cube needs to be 0.5 px smaller then the texture
+  // to ensure that sampling begins at the center of a (3d) pixel
+  float size = textureSize(u_color_lut, 0).x;
+  vec3 uvw = (c.rgb * (size - 1.0) + 0.5) / size;
+  return texture(u_color_lut, uvw).rgb;
+}
+
 
 void main() {
 	vec3 color = texture(u_color, in_uv).rgb;
@@ -124,6 +133,9 @@ void main() {
   // Gamma correction
   color = clamp(color, vec3(0), vec3(1));
   color = pow(color, vec3(1.0/2.4));
+
+  // lut color correction
+  color = colorLookup(color);
 
   out_color = vec4(color, 1.);
 

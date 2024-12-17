@@ -249,6 +249,15 @@ func main() {
 		iblBdrfLut.Load(0, lut.Width, lut.Height, 0, gl.RG, lut.Pix)
 	})
 
+	var colorLut UnboundTexture
+	lm.OnLoad(func(ctx *glfw.Window) {
+		colorLutImg, err := pack.LoadTexture("adjusted_lut")
+		check(err)
+		colorLut = NewTexture(gl.TEXTURE_3D)
+		colorLut.Allocate(1, gl.RGB8, 32, 32, 32)
+		colorLut.Load(0, 32, 32, 32, gl.RGBA, colorLutImg.Pix)
+	})
+
 	cam := &Camera{
 		Position:          mgl32.Vec3{0.0, 1.0, -1.0},
 		Orientation:       mgl32.Vec3{0.0, 180.0, 0.0},
@@ -298,14 +307,14 @@ func main() {
 	}
 
 	lightColors := []mgl32.Vec3{
-		mgl32.Vec3{3.75, 7.0, 1.75}.Mul(10),
-		mgl32.Vec3{7.0, 2.9, 3.0}.Mul(10),
-		mgl32.Vec3{7.0, 4.35, 2.05}.Mul(10),
-		mgl32.Vec3{4.25, 1.75, 7.0}.Mul(10),
+		mgl32.Vec3{3.75, 7.0, 1.75}.Mul(0),
+		mgl32.Vec3{7.0, 2.9, 3.0}.Mul(0),
+		mgl32.Vec3{7.0, 4.35, 2.05}.Mul(0),
+		mgl32.Vec3{4.25, 1.75, 7.0}.Mul(0),
 	}
 
-	envOrigin := mgl32.Vec3{0, 1.2, 0}
-	envPos := mgl32.Vec3{0.07, -0.105, 0}
+	envOrigin := mgl32.Vec3{0, 1.205, 0}
+	envPos := mgl32.Vec3{0.231, -0.21, 0}
 	envDim := mgl32.Vec3{3.3, 2.0, 2.3}
 	envRot := libutil.Deg2Rad * 141.8
 	var envTransform mgl32.Mat4
@@ -326,8 +335,8 @@ func main() {
 		}
 		if Input.IsMouseDown(glfw.MouseButtonRight) {
 			rotation := Input.CursorDelta()
-			cam.Orientation[0] += rotation[1] * 0.35
-			cam.Orientation[1] += rotation[0] * 0.35
+			cam.Orientation[0] -= rotation[1] * 0.35
+			cam.Orientation[1] -= rotation[0] * 0.35
 		}
 		cam.UpdateViewMatrix()
 
@@ -346,7 +355,7 @@ func main() {
 		pbrShader.VertexStage().SetUniform("u_view_projection_mat", cam.ProjectionMatrix.Mul4(cam.ViewMatrix))
 		pbrShader.FragmentStage().SetUniform("u_camera_position", cam.Position)
 		pbrShader.FragmentStage().SetUniform("u_ambient_factor", abmientFactor)
-		envTransform = mgl32.Translate3D(envOrigin[0], envOrigin[1], envOrigin[2]).Mul4(mgl32.HomogRotate3DY(envRot)).Mul4(mgl32.Scale3D(envDim[0], envDim[1], envDim[2])).Mul4(mgl32.Translate3D(envPos[0], envPos[1], envPos[2]))
+		envTransform = mgl32.Translate3D(envOrigin[0], envOrigin[1], envOrigin[2]).Mul4(mgl32.HomogRotate3DY(envRot)).Mul4(mgl32.Translate3D(envPos[0], envPos[1], envPos[2])).Mul4(mgl32.Scale3D(envDim[0], envDim[1], envDim[2]))
 		pbrShader.FragmentStage().SetUniform("u_environment_transform", envTransform.Inv())
 		pbrShader.FragmentStage().SetUniform("u_environment_origin", envOrigin)
 
@@ -400,6 +409,8 @@ func main() {
 		hdrFbo.GetTexture(gl.DEPTH_ATTACHMENT).Bind(1)
 		framebufferSampler.Bind(2)
 		bloomResult.Bind(2)
+		lutSampler.Bind(3)
+		colorLut.Bind(3)
 		libutil.DrawQuad()
 
 		im.NewFrame()

@@ -1,0 +1,4 @@
+{
+	"fragment": "pbr_normals_issue.frag",
+	"vertex": "pbr.vert"
+}

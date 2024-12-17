@@ -22,7 +22,7 @@ There are two launch options:
 
 ### Issues
 
-For some reason I only get a single frame when running the demo on my Intel UHD Graphics.
+For some reason this project freezes with Intel UHD Graphics.
 
 ## Controls
 

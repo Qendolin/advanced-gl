@@ -90,7 +90,7 @@ func main() {
 	var (
 		selectedMaterial  string = "herringbone_parquet" // array_test, dirty_mirror, square_floor, herringbone_parquet
 		selectedMesh      string = "plane"               // array_spheres_uv, plane
-		selectedHdriName  string
+		selectedHdriName  string = "small_empty_room_1_4k"
 		selectedHdriLevel int32
 		selectedHdri      *ibl.IblEnv
 	)
@@ -216,7 +216,7 @@ func main() {
 	skyBox.BindBuffer(0, skyBoxVbo, 0, 3*4)
 
 	lm.OnLoad(func(ctx *glfw.Window) {
-		hdirName := "small_empty_room_1_4k" // studio_small_02_4k, small_empty_room_1_4k
+		hdirName := selectedHdriName // studio_small_02_4k, small_empty_room_1_4k
 		hdri, err := pack.LoadHdri(hdirName)
 		check(err)
 		hdriIrradiance, err := pack.LoadHdri(hdirName + "_diffuse")
@@ -528,6 +528,21 @@ func main() {
 		if im.SliderFloat("Rotation", &envRotDeg, 0, 360) {
 			envRot = envRotDeg * libutil.Deg2Rad
 		}
+		{
+			envMin := envPos.Sub(envDim.Mul(0.5))
+			envMax := envPos.Add(envDim.Mul(0.5))
+
+			if im.DragFloat3("Min", (*[3]float32)(&envMin)) {
+				envDim = envMax.Sub(envMin)
+				envPos = envMin.Add(envDim.Mul(0.5))
+			}
+
+			if im.DragFloat3("Max", (*[3]float32)(&envMax)) {
+				envDim = envMax.Sub(envMin)
+				envPos = envMin.Add(envDim.Mul(0.5))
+			}
+		}
+
 		im.DragFloat3("Origin", (*[3]float32)(&envOrigin))
 		im.DragFloat3("Position", (*[3]float32)(&envPos))
 		im.DragFloat3("Dimension", (*[3]float32)(&envDim))

@@ -30,6 +30,7 @@ type clCore struct {
 	context *cl.Context
 	queue   *cl.CommandQueue
 	program *cl.Program
+	device  *cl.Device
 }
 
 type clConverter struct {
@@ -124,6 +125,7 @@ func newClCore(preferredDevice DeviceType, programs ...string) (core *clCore, er
 		context: ctx,
 		queue:   queue,
 		program: prog,
+		device:  device,
 	}, nil
 }
 
@@ -551,8 +553,8 @@ func GenerateClBrdfLut(preferredDevice DeviceType, size, quality int) (*libio.Fl
 		return nil, err
 	}
 
-	localWorkSize := []int{32, 32, 1}
-	globalWorkSize := []int{roundUpKernelSize(localWorkSize[0], size), roundUpKernelSize(localWorkSize[1], size), 6}
+	localWorkSize := []int{8, 8, 1}
+	globalWorkSize := []int{roundUpKernelSize(localWorkSize[0], size), roundUpKernelSize(localWorkSize[1], size), 1}
 
 	_, err = core.queue.EnqueueNDRangeKernel(kernel, []int{0, 0, 0}, globalWorkSize, localWorkSize, nil)
 	if err != nil {
@@ -562,6 +564,11 @@ func GenerateClBrdfLut(preferredDevice DeviceType, size, quality int) (*libio.Fl
 	result := make([]float32, size*size*2)
 
 	_, err = core.queue.EnqueueReadImage(dstImage, true, [3]int{}, [3]int{size, size, 1}, 0, 0, unsafe.Pointer(&result[0]), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	err = core.queue.Finish()
 	if err != nil {
 		return nil, err
 	}

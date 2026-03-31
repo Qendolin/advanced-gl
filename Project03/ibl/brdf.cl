@@ -59,6 +59,7 @@ __kernel void integrate_brdf(__write_only image2d_t dstImage, int size,
   V.x = sqrt(1.0f - NdotV * NdotV);
   V.y = 0.0f;
   V.z = NdotV;
+  V.w = 0.0f;
 
   float A = 0.0f;
   float B = 0.0f;
@@ -76,7 +77,7 @@ __kernel void integrate_brdf(__write_only image2d_t dstImage, int size,
 
     if (NdotL > 0.0f) {
       float g = geometrySmith(N, V, L, roughness);
-      float gvis = (g * VdotH) / (NdotH * NdotV);
+      float gvis = (g * VdotH) / fmax(NdotH * NdotV, 1e-6f);
       float Fc = pow(1.0f - VdotH, 5.0f);
 
       A += (1.0f - Fc) * gvis;

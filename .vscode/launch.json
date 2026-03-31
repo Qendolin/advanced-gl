@@ -42,7 +42,7 @@
 			"request": "launch",
 			"mode": "auto",
 			"program": "${workspaceFolder}/Project03/cmd/brdflut",
-			"args": ["-compression", "2", "ibl_brdf_lut.f32"]
+			"args": ["-compression", "1", "ibl_brdf_lut.f32"]
 		},
 		{
 			"name": "Normals Issue",
